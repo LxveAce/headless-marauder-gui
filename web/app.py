@@ -53,6 +53,13 @@ def _push_tables():
     socketio.emit("tables", {"aps": aps, "stations": stas})
 
 
+def _cancel_autolist_timer():
+    global _autolist_timer
+    if _autolist_timer is not None:
+        _autolist_timer.cancel()
+        _autolist_timer = None
+
+
 def _autolist_tick():
     global _autolist_timer
     if _autolist_active and ctrl and ctrl.connected:
@@ -114,6 +121,7 @@ def on_connect_serial(data):
 def on_disconnect_serial():
     global ctrl, _autolist_active
     _autolist_active = False
+    _cancel_autolist_timer()
     if ctrl:
         ctrl.disconnect()
     emit("status", {"connected": False, "port": None})
@@ -145,11 +153,13 @@ def on_stop():
         ctrl.stop()
     global _autolist_active
     _autolist_active = False
+    _cancel_autolist_timer()
 
 
 @socketio.on("autolist")
 def on_autolist(data):
     global _autolist_active
+    _cancel_autolist_timer()
     _autolist_active = data.get("enabled", False)
     if _autolist_active:
         _autolist_tick()
@@ -185,7 +195,9 @@ def on_flash_detect(data):
         emit("flash_status", {"error": "No port specified"})
         return
     try:
-        chip = flasher.detect_chip(port)
+        def _flash_line(line):
+            socketio.emit("serial", {"line": line})
+        chip = flasher.detect_chip(port, _flash_line)
         emit("flash_status", {"chip": chip})
     except Exception as e:
         emit("flash_status", {"error": str(e)})
