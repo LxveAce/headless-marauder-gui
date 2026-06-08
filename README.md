@@ -1,68 +1,54 @@
 # Headless Marauder
 
-**Native control + firmware flasher for a headless [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder).**
-No browser, no Web Serial, no cloud — a real application that talks straight to the
-board over USB serial, shows live Access-Point / Station tables, picks targets with checkboxes,
-logs everything to disk, and flashes firmware itself.
+Control and flash a headless [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) from your computer — no browser, no Web Serial, no cloud. A real app that talks to the board over USB serial, shows live AP/Station tables, lets you pick targets with checkboxes, logs everything to disk, and flashes firmware itself.
 
-> Built for a headless Marauder (e.g. a Lonely Binary "Gold" ESP32 with an external antenna and
-> no screen) driven from a Raspberry Pi / laptop — including as the brain of a cyberdeck. Works
-> with any ESP32 running Marauder firmware.
+> Built for a headless Marauder (like a Lonely Binary "Gold" ESP32 with an antenna and no screen) driven from a Raspberry Pi or laptop — works great as the brain of a cyberdeck. Compatible with any ESP32 running Marauder firmware.
 
-**Platforms:** Linux (Kali, Debian, Ubuntu, Arch, Fedora), Windows 10/11, macOS, WSL2
+**Runs on:** Linux (Kali, Debian, Ubuntu, Arch, Fedora), Windows 10/11, macOS, WSL2
 
 ---
 
-## Why
+## Why this exists
 
-The browser UIs for Marauder rely on the **Web Serial API**, which only exists in Chromium — so
-on Kali (Firefox by default) they simply don't work, and they're thin on options. This is a
-**native app**: it owns the serial port directly, exposes the *full* Marauder command set, and runs
-in any environment (and can auto-start headless on a deck).
+The browser UIs for Marauder rely on the Web Serial API, which only works in Chromium. On Kali (Firefox by default) they just don't work, and they're pretty limited anyway. This is a native app — it owns the serial port directly, exposes the full Marauder command set, and runs anywhere (including headless on a deck at boot).
 
-## Features
+## What it does
 
-- **Four front-ends, one core** — a polished **PyQt5 GUI** (recommended), a simple **Tkinter GUI**, a **Textual TUI** for the terminal/SSH, and a **Browser UI** (localhost Flask + WebSocket) for any device with a web browser.
-- **Every Marauder command** (70+) as buttons/tree entries, with parameter forms, plus a raw command box for anything.
-- **Live tables** — `scanap` auto-fills the **Access Points** tab (and the TUI table); APs/Stations parsed straight off the serial stream and de-duplicated.
-- **Target picker** — click *Select APs* and check the networks you want; it builds the correct `select -a 0,2,5` from Marauder's real indices (manual entry still available).
-- **Built-in firmware flasher** — detects the chip (classic ESP32 vs S3), pulls the right firmware variant from the official GitHub release, and flashes at the correct offsets with `--flash_size detect`. App-only update *or* full blank-board flash. Wraps `esptool`.
-- **Data logging** — capture the raw serial stream + a live `latest.json` snapshot + `aps.csv`/`stations.csv` to a folder you choose; `tail -f`-friendly for other tools/devices.
-- **Built-in help** — hover any command for a description; an in-app **Guide** tab (the full [GUIDE.md](GUIDE.md)) explains every tool and how to **chain scanning + attacks** and feed the results into other software (Wireshark, hashcat, WiGLE, Kismet...).
-- **Self-update** — *Help > Check for Updates* runs `git pull` + reinstall from this repo.
-- **Installable** — runs from anywhere after install (no need to `cd` into the project). Adds to your system PATH, application menu (Linux), and Start Menu (Windows).
-- **Updatable** — `git pull` in the project folder pulls the latest code. Dependencies auto-update with the in-app updater.
+- **Four front-ends, one core** — a PyQt5 desktop GUI (recommended), a Tkinter GUI, a Textual TUI for terminal/SSH, and a browser UI (Flask + WebSocket at localhost:5000).
+- **Every Marauder command** (70+) as buttons and tree entries, with parameter forms, plus a raw command box.
+- **Live tables** — `scanap` fills the Access Points tab automatically; APs and stations parsed straight off the serial stream.
+- **Target picker** — check the networks you want, it builds the right `select -a 0,2,5` from Marauder's indices.
+- **Built-in flasher** — detects the chip (ESP32 vs S3), pulls firmware from GitHub, flashes at the right offsets with `--flash_size detect`. App-only or full blank-board flash.
+- **Data logging** — raw serial log, live `latest.json` snapshot, `aps.csv` / `stations.csv` to a folder you pick. Other tools can `tail -f` or poll these while the app runs.
+- **Built-in help** — tooltips on every command; an in-app Guide tab covers attack chaining and feeding data into Wireshark, hashcat, WiGLE, Kismet, etc.
+- **Self-update** — Help > Check for Updates pulls the latest code and reinstalls deps.
+- **Installable** — adds to your PATH, app menu (Linux), Start Menu (Windows). Run from anywhere after install.
 
 ---
 
 ## Install
 
-### Download (easiest — no Python or Git needed)
+### Download (easiest)
 
-Pre-built standalone executables are available on the
-[Releases page](https://github.com/LxveAce/headless-marauder-gui/releases/latest):
+Grab a pre-built binary from the [Releases page](https://github.com/LxveAce/headless-marauder-gui/releases/latest) — no Python or Git needed:
 
 | Platform | File | Notes |
 |----------|------|-------|
-| **Windows** | `headless-marauder-vX.X.X-windows-x64.exe` | Double-click to run. No install. |
-| **Linux x64** | `headless-marauder-vX.X.X-linux-x64` | `chmod +x` then run. Debian, Kali, Ubuntu, etc. |
-| **Linux ARM64** | `headless-marauder-vX.X.X-linux-arm64` | `chmod +x` then run. Raspberry Pi (64-bit OS), ARM SBCs. |
+| Windows x64 | `headless-marauder-vX.X.X-windows-x64.exe` | Double-click to run |
+| Linux x64 | `headless-marauder-vX.X.X-linux-x64` | `chmod +x` then run |
+| Linux ARM64 | `headless-marauder-vX.X.X-linux-arm64` | Raspberry Pi (64-bit OS), ARM SBCs |
 
-These are self-contained — Python, PyQt5, and all dependencies are bundled inside. Just
-download, run, and connect your ESP32.
+Everything's bundled — Python, PyQt5, all dependencies. Download, run, plug in your ESP32.
 
-> **Note:** The standalone builds include the **Qt GUI** only. For the TUI, Browser UI,
-> or development use, install from source (below). Updates require downloading the new
-> release — in-app "Check for Updates" is not available in standalone builds.
+> The standalone builds only include the Qt GUI. For the TUI, browser UI, or dev work, install from source. Updates require downloading the new release (no in-app updater in standalone mode).
 >
-> **Raspberry Pi users:** The ARM64 build requires a **64-bit OS** (Raspberry Pi OS 64-bit,
-> Kali ARM 64-bit, Ubuntu ARM). If you're on 32-bit Pi OS, install from source instead.
+> **Pi users:** ARM64 build needs a 64-bit OS (Pi OS 64-bit, Kali ARM 64-bit, Ubuntu ARM). On 32-bit, install from source instead.
 
 ---
 
-### From source (recommended for full features)
+### From source
 
-### Linux (Kali / Debian / Ubuntu)
+#### Linux (Kali / Debian / Ubuntu)
 
 ```bash
 git clone https://github.com/LxveAce/headless-marauder-gui.git
@@ -70,18 +56,16 @@ cd headless-marauder-gui
 ./install.sh
 ```
 
-This creates a venv, installs all dependencies (PyQt5, esptool, textual, flask), and adds:
-- `headless-marauder` (Qt GUI), `headless-marauder-tui` (terminal), and `headless-marauder-web` (browser) to `~/.local/bin`
-- A **"Headless Marauder"** entry in your application menu
+Sets up a venv, installs everything, and gives you `headless-marauder` (Qt GUI), `headless-marauder-tui` (terminal), and `headless-marauder-web` (browser) in `~/.local/bin`, plus a menu entry.
 
-Give yourself serial access without `sudo` (once, then re-login):
+Serial access without sudo (re-login after):
 ```bash
 sudo usermod -aG dialout $USER
 ```
 
-### Windows
+#### Windows
 
-**Prerequisites:** [Python 3.9+](https://python.org) (check "Add Python to PATH" during install) and [Git](https://git-scm.com/downloads).
+You'll need [Python 3.9+](https://python.org) (check "Add Python to PATH") and [Git](https://git-scm.com/downloads).
 
 ```
 git clone https://github.com/LxveAce/headless-marauder-gui.git
@@ -89,15 +73,13 @@ cd headless-marauder-gui
 install.bat
 ```
 
-This creates a venv, installs all dependencies (PyQt5, esptool, flask), and adds:
-- `headless-marauder`, `headless-marauder-tk`, `headless-marauder-tui`, and `headless-marauder-web` commands to your PATH
-- A **Start Menu shortcut**
+Gives you `headless-marauder`, `headless-marauder-tk`, `headless-marauder-tui`, and `headless-marauder-web` commands, plus a Start Menu shortcut.
 
-> **Open a new terminal** after install for the PATH to take effect.
+> Open a new terminal after install so PATH takes effect.
 
-**CH340 driver:** If Windows doesn't detect your ESP32, install the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html). Your board will appear as a COM port (e.g. `COM3`).
+**CH340 driver:** If Windows doesn't see your ESP32, grab the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html). Board shows up as a COM port (e.g. `COM3`).
 
-### macOS / Other
+#### macOS / Other
 
 ```bash
 git clone https://github.com/LxveAce/headless-marauder-gui.git
@@ -105,29 +87,29 @@ cd headless-marauder-gui
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install PyQt5                # for the Qt GUI
+pip install PyQt5
 ```
 
-Run with:
+Then run:
 ```bash
 source .venv/bin/activate
 python3 gui_qt/app.py           # Qt GUI
-python3 gui/app.py              # Tkinter GUI
-python3 tui/app.py              # Terminal UI
+python3 gui/app.py              # Tkinter
+python3 tui/app.py              # Terminal
 ```
 
-Add `--mock` to explore without hardware, `--port /dev/tty.usbserial-xxxx` to specify a port.
+Add `--mock` to try it without hardware, `--port /dev/tty.usbserial-xxxx` to specify a port.
 
-### pip install (cross-platform, advanced)
+#### pip install
 
 ```bash
 pip install git+https://github.com/LxveAce/headless-marauder-gui.git[all]
 ```
 
-This installs `headless-marauder-tk` and `headless-marauder-tui` as commands. The PyQt5 GUI requires running `python -m gui_qt.app` from the cloned repo (Qt entry points don't play well with all pip environments).
+Gets you `headless-marauder-tk` and `headless-marauder-tui`. The Qt GUI needs to be run from a clone (`python -m gui_qt.app`) since Qt entry points can be finicky with pip.
 
 <details>
-<summary>Manual / dev run (no installer)</summary>
+<summary>Manual / dev run</summary>
 
 ```bash
 # Linux
@@ -145,133 +127,112 @@ pip install PyQt5
 python gui_qt\app.py
 ```
 
-Add `--mock` to explore with no board, `--port COM3` or `--port /dev/ttyUSB0` to skip auto-detect, `--log` to start recording immediately.
+Flags: `--mock` (no hardware), `--port COM3` or `--port /dev/ttyUSB0` (skip autodetect), `--log` (start recording).
 </details>
 
 ---
 
-## Update
+## Updating
 
-Headless Marauder updates via `git pull` — your settings and logs are untouched.
+`git pull` in the project folder. Settings and logs are untouched.
 
-### From the app (easiest)
+The easiest way: **Help > Check for Updates** in the app — it pulls and reinstalls deps automatically.
 
-**Help > Check for Updates** — pulls the latest code and reinstalls dependencies automatically.
-
-### From the terminal
-
+From the terminal:
 ```bash
 cd headless-marauder-gui
 git pull
+# Linux: re-run ./install.sh if deps changed
+# Windows: .venv\Scripts\pip.exe install -q -r requirements.txt
 ```
 
-On Linux, re-run the installer if dependencies changed:
-```bash
-./install.sh
-```
-
-On Windows:
-```
-.venv\Scripts\pip.exe install -q -r requirements.txt
-```
-
-### What updates touch
-
-| Updated | Not touched |
-|---------|-------------|
-| All Python source code | Your `.venv` (deps reinstalled on top) |
-| GUIDE.md, README.md | Your log files (`~/marauder-logs`) |
-| Command catalog (new commands appear in UI) | Your serial port settings |
-| Flasher logic (new chip support) | Any local config you've made |
+Updates touch source code, docs, the command catalog, and flasher logic. They don't touch your venv (deps install on top), log files, serial settings, or any local config.
 
 ---
 
 ## Uninstall
 
-### Linux
+**Linux:**
 ```bash
 cd headless-marauder-gui
 ./uninstall.sh          # removes launchers + menu entry
-rm -rf ../headless-marauder-gui   # remove the repo + venv
+rm -rf ../headless-marauder-gui
 ```
 
-### Windows
+**Windows:**
 ```
 cd headless-marauder-gui
 uninstall.bat           # removes launchers + Start Menu shortcut
 ```
-Then delete the `headless-marauder-gui` folder manually.
+Then delete the `headless-marauder-gui` folder.
 
 ---
 
 ## Using it
 
-1. **Connect** — it auto-detects the board (115200 baud); the top bar turns green.
-2. **Scan APs** — with **Auto-list** on (default), the **Access Points** tab fills itself while it scans.
+1. **Connect** — auto-detects the board (115200 baud). Top bar turns green.
+2. **Scan APs** — with auto-list on (default), the Access Points tab fills while scanning.
 3. **STOP** when you've seen enough.
-4. **Select APs** — tick the network(s) in the picker > it sends `select -a ...`.
-5. Run an action — e.g. **Deauth (selected APs)** (leave `src`/`dst` blank for a normal broadcast deauth).
+4. **Select APs** — tick networks in the picker, it sends `select -a ...`.
+5. Run an action — e.g. Deauth (selected APs).
 
 ### Browser UI
 
-Run `headless-marauder-web` (or `python web/app.py`) and open **http://localhost:5000** in any browser. Same features as the desktop GUIs — command sidebar, live console, AP/Station tables, parameter forms, auto-list, logging toggle, and keyboard shortcuts (`Ctrl+L` clear, `Ctrl+K` focus command box, `Ctrl+.` STOP). The raw command box supports up/down arrow history.
+Run `headless-marauder-web` (or `python web/app.py`) and open **http://localhost:5000**. Same features as the desktop GUIs — command sidebar, live console, AP/Station tables, parameter forms, auto-list, logging, keyboard shortcuts (`Ctrl+L` clear, `Ctrl+K` command box, `Ctrl+.` STOP). Raw input supports arrow-key history.
 
-The web UI binds to **localhost only** by default (not exposed to the network). To allow access from other devices on your LAN (e.g. a phone), pass `--host 0.0.0.0`.
+Binds to localhost only by default. Pass `--host 0.0.0.0` to open it up to your LAN (no auth — anyone on the network can control the board).
 
 ### Keyboard shortcuts (Qt GUI)
 
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+L` | Clear console |
-| `F5` | Refresh serial ports |
-| `Ctrl+K` | Focus raw command box |
-| `Ctrl+.` | STOP (stop all scans/attacks) |
+| `F5` | Refresh ports |
+| `Ctrl+K` | Focus command box |
+| `Ctrl+.` | STOP |
 | `Ctrl+U` | Check for updates |
 | `Ctrl+Q` | Quit |
-| `F1` | Open Guide tab |
+| `F1` | Open Guide |
 
 ### Flashing firmware
 
 1. Click **Flash Firmware**
-2. **Detect chip** — identifies classic ESP32 vs S3
-3. **Load release list** — fetches from the official Marauder GitHub
+2. **Detect chip** — figures out if it's a classic ESP32 or S3
+3. **Load release list** — pulls from the official Marauder GitHub
 4. Pick a variant (auto-selected based on your chip)
-5. Choose **Update app only** (existing board) or **Full flash** (blank board)
-6. Click **FLASH** — progress streams in real-time
+5. **Update app only** (existing board) or **Full flash** (blank board)
+6. **FLASH** — progress streams in real-time
 
 ### Logging
 
-Toggle **Log** in the toolbar (or *File > Set Log Folder*). Default: `~/marauder-logs`.
+Toggle **Log** in the toolbar (or File > Set Log Folder). Default: `~/marauder-logs`.
 
-| File | Contents |
-|------|----------|
-| `serial-YYYYMMDD-HHMMSS.log` | Raw serial stream (`tail -f` friendly) |
-| `latest.json` | Live snapshot: AP count, station count, full arrays |
-| `aps.csv` | Parsed access points (SSID, channel, RSSI, BSSID) |
+| File | What's in it |
+|------|-------------|
+| `serial-YYYYMMDD-HHMMSS.log` | Raw serial stream (`tail -f` it) |
+| `latest.json` | Live snapshot: AP/station counts + full arrays |
+| `aps.csv` | Parsed APs (SSID, channel, RSSI, BSSID) |
 | `stations.csv` | Parsed stations (MAC, AP BSSID, RSSI) |
 
 ---
 
 ## Troubleshooting
 
-### Linux
+**Linux:**
+- **No `/dev/ttyUSB0`** — The Gold uses a CH340. On Kali, `brltty` likes to steal it: `sudo apt remove brltty`, replug. Make sure you're in `dialout`.
+- **In a VM** — Pass the USB device through (VirtualBox: Devices > USB; VMware: VM > Removable Devices).
+- **Qt GUI won't start** — PyQt5 missing. `sudo apt install -y python3-pyqt5` (venv needs `--system-site-packages`), or just use the TUI.
 
-- **No `/dev/ttyUSB0`** — the Gold uses a CH340. On Kali, `brltty` often steals it: `sudo apt remove brltty`, replug. Also ensure you're in `dialout`.
-- **In a VM** — pass the USB device through to the guest (VirtualBox: Devices > USB; VMware: VM > Removable Devices).
-- **Qt GUI won't start** — PyQt5 missing: `sudo apt install -y python3-pyqt5` (venv must use `--system-site-packages`), or use `headless-marauder-tui`.
+**Windows:**
+- **No COM port** — Install the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html). Check Device Manager > Ports.
+- **`headless-marauder` not recognized** — Open a new terminal (PATH was just updated).
+- **Permission denied on COM port** — Close any other serial monitor (Arduino IDE, PuTTY, etc.).
 
-### Windows
-
-- **No COM port** — install the [CH340 driver](https://www.wch-ic.com/downloads/CH341SER_EXE.html). Check Device Manager > Ports.
-- **`headless-marauder` not recognized** — open a **new** terminal after install (PATH was updated for the current user). Or run `%USERPROFILE%\.local\bin\headless-marauder.bat` directly.
-- **Permission denied on COM port** — close any other serial monitor (Arduino IDE, PuTTY, etc.) that has the port open.
-
-### General
-
-- **Board boot-loops / `scanap` does nothing** — check the Console:
-  - `invalid header: 0xffffffff` — flash is **blank** — use flasher **Full flash**.
-  - `Detected size(4096k) smaller than ... header(16384k)` — wrong flash-size header — the flasher fixes this with `--flash_size detect`; **Erase**, then re-flash.
-- **Deauth "does nothing"** — Marauder prints `Starting Deauthentication attack` once, then runs silently. If a device doesn't drop, it's almost always **802.11w/PMF** (modern routers ignore deauth), a **5GHz** target (classic ESP32 is 2.4GHz only), or **no clients** connected.
+**General:**
+- **Board boot-loops / `scanap` does nothing** — Check the console output:
+  - `invalid header: 0xffffffff` — flash is blank, use Full flash.
+  - `Detected size(4096k) smaller than ... header(16384k)` — wrong flash size header. The flasher fixes this with `--flash_size detect`; erase and re-flash.
+- **Deauth "does nothing"** — Marauder prints the start message once then runs silently. If a device doesn't drop, it's usually 802.11w/PMF (modern routers ignore deauth), a 5GHz target (classic ESP32 is 2.4GHz only), or no clients connected.
 
 ---
 
@@ -279,50 +240,34 @@ Toggle **Log** in the toolbar (or *File > Set Log Folder*). Default: `~/marauder
 
 ```
 marauder_core/   controller.py  parsing.py  commands.py  flasher.py  capture.py  updater.py
-gui_qt/app.py    PyQt5 GUI (live tables, picker, flasher, logging)   <-- recommended
+gui_qt/app.py    PyQt5 GUI (live tables, picker, flasher, logging)
 gui/app.py       Tkinter GUI (simple, stdlib)
 tui/app.py       Textual terminal UI
 web/app.py       Browser UI (Flask + SocketIO at localhost:5000)
-install.sh       Linux installer (app menu + PATH launchers + venv)
-install.bat      Windows installer (Start Menu + PATH launchers + venv)
+install.sh       Linux installer (app menu + PATH + venv)
+install.bat      Windows installer (Start Menu + PATH + venv)
 ```
 
-One command catalog and one parser feed all four front-ends; the serial layer streams to the UI, the parser, and the logger together.
+One command catalog and one parser feed all four front-ends. The serial layer streams to the UI, the parser, and the logger at the same time.
 
 ---
 
-## Legal & Liability
+## Legal
 
-**For authorized security testing only.** Use against networks and devices you own or have
-explicit written permission to test. WiFi deauthentication, evil-portal, and BLE-spam features
-can be illegal to use against others (e.g. US CFAA, FCC Part 15, UK Computer Misuse Act, EU
-Directive 2013/40/EU). **You are solely responsible for how you use this tool.**
+**For authorized security testing only.** Use on networks and devices you own or have written permission to test. WiFi deauth, evil portals, BLE spam — these can be illegal against other people's stuff (CFAA, FCC rules, etc.). You are responsible for how you use this tool.
 
-This software is provided "as is" with no warranty. The author(s) accept no liability for
-damages or legal consequences arising from its use or misuse.
+Provided "as is" with no warranty. See [DISCLAIMER.md](DISCLAIMER.md) for the full notice.
 
-**Read the full [Disclaimer & Liability Notice](DISCLAIMER.md) before use.**
+Found a vulnerability? Don't open a public issue — see [SECURITY.md](SECURITY.md).
+
+PRs and bug reports welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## Security
+## Credits
 
-Found a vulnerability? **Do not open a public issue.** See [SECURITY.md](SECURITY.md) for
-responsible disclosure instructions.
+- Firmware: [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) by justcallmekoko (GPL) — this app just talks to it over serial.
+- Built with [pyserial](https://pyserial.readthedocs.io/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/), [Textual](https://textual.textualize.io/), [Flask](https://flask.palletsprojects.com/), and [esptool](https://github.com/espressif/esptool).
+- Part of the [cyberdeck project](https://github.com/LxveAce/Projects/tree/main/projects/14-cyberdeck).
 
----
-
-## Contributing
-
-Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for guidelines, code style, and architecture notes.
-
----
-
-## Credits & License
-
-- Firmware: **[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder)** by justcallmekoko (GPL) — this app only talks to it over serial.
-- Built on [pyserial](https://pyserial.readthedocs.io/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/), [Textual](https://textual.textualize.io/), [Flask](https://flask.palletsprojects.com/), and [esptool](https://github.com/espressif/esptool).
-- Part of the [Cyberdeck project](https://github.com/LxveAce/Projects/tree/main/projects/14-cyberdeck).
-
-Licensed under the **[MIT License](LICENSE)** — see [CHANGELOG.md](CHANGELOG.md) for version history.
+[MIT License](LICENSE) | [Changelog](CHANGELOG.md)
