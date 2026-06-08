@@ -37,6 +37,27 @@ in any environment (and can auto-start headless on a deck).
 
 ## Install
 
+### Download (easiest — no Python or Git needed)
+
+Pre-built standalone executables are available on the
+[Releases page](https://github.com/LxveAce/headless-marauder-gui/releases/latest):
+
+| Platform | File | Notes |
+|----------|------|-------|
+| **Windows** | `headless-marauder-vX.X.X-windows-x64.exe` | Double-click to run. No install. |
+| **Linux** | `headless-marauder-vX.X.X-linux-x64` | `chmod +x` then run. No install. |
+
+These are self-contained — Python, PyQt5, and all dependencies are bundled inside. Just
+download, run, and connect your ESP32.
+
+> **Note:** The standalone builds include the **Qt GUI** only. For the TUI, Browser UI,
+> or development use, install from source (below). Updates require downloading the new
+> release — in-app "Check for Updates" is not available in standalone builds.
+
+---
+
+### From source (recommended for full features)
+
 ### Linux (Kali / Debian / Ubuntu)
 
 ```bash
