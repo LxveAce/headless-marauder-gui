@@ -221,6 +221,13 @@ function appendConsole(text, cls) {
   con.scrollTop = con.scrollHeight;
 }
 
+function esc(v) {
+  if (v === undefined || v === null || v === -1) return "";
+  const d = document.createElement("span");
+  d.textContent = String(v);
+  return d.innerHTML;
+}
+
 function renderTable(tbodyId, rows, fields) {
   const tbody = document.getElementById(tbodyId);
   let html = "";
@@ -228,7 +235,7 @@ function renderTable(tbodyId, rows, fields) {
     html += "<tr>";
     for (const f of fields) {
       const cls = f === "rssi" ? ' class="rssi"' : "";
-      html += `<td${cls}>${r[f] !== undefined && r[f] !== null && r[f] !== -1 ? r[f] : ""}</td>`;
+      html += `<td${cls}>${esc(r[f])}</td>`;
     }
     html += "</tr>";
   }
@@ -423,10 +430,9 @@ document.addEventListener("keydown", (e) => {
 // ── keyboard shortcuts ─────────────────────────────────────────────────── //
 
 document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
-  if (e.ctrlKey && e.key === "l") { e.preventDefault(); document.getElementById("btn-clear").click(); }
-  if (e.ctrlKey && e.key === "k") { e.preventDefault(); rawInput.focus(); }
-  if (e.ctrlKey && e.key === ".") { e.preventDefault(); document.getElementById("btn-stop").click(); }
+  if (e.ctrlKey && e.key === "l") { e.preventDefault(); document.getElementById("btn-clear").click(); return; }
+  if (e.ctrlKey && e.key === ".") { e.preventDefault(); document.getElementById("btn-stop").click(); return; }
+  if (e.ctrlKey && e.key === "k") { e.preventDefault(); rawInput.focus(); return; }
 });
 
 // ── init ───────────────────────────────────────────────────────────────── //
