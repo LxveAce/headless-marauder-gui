@@ -1,76 +1,55 @@
 # Changelog
 
-All notable changes to Headless Marauder are documented here.
-
 ## [1.2.0] — 2026-06-08
 
-### Added
-- **Browser UI** — Flask + SocketIO web interface at `localhost:5000`
-  - Full command sidebar (70+ commands, grouped by category)
-  - Live serial console via WebSocket (real-time, no polling)
-  - Auto-populating Access Points and Stations tables
-  - Parameter modals with validation
-  - Raw command input with up/down arrow history
-  - Auto-list, logging toggle, STOP button
-  - Keyboard shortcuts (Ctrl+L, Ctrl+K, Ctrl+.)
-  - Dark neon-green theme matching the desktop GUIs
-  - `--mock` mode for exploring without hardware
-  - `--host 0.0.0.0` option for LAN access
-- `headless-marauder-web` launcher (Linux + Windows installers)
-- `run-web.sh` / `run-web.bat` dev launchers
-- `SECURITY.md` — vulnerability reporting policy
-- `DISCLAIMER.md` — legal disclaimer and liability notice
-- `CONTRIBUTING.md` — contribution guidelines
-- `CHANGELOG.md` — version history
+Added a browser-based UI, standalone executables, and project policies.
 
-### Changed
-- Updated `requirements.txt` with Flask and Flask-SocketIO
-- Updated `pyproject.toml` with `[web]` optional dependency group
-- Updated installers to include web UI launcher
-- Updated `README.md` with Browser UI documentation
+**New stuff:**
+- Browser UI — Flask + SocketIO at `localhost:5000`. Full command sidebar, live console over WebSocket, AP/Station tables, parameter forms, raw command input with history, auto-list, logging, keyboard shortcuts (Ctrl+L/K/.), dark theme, `--mock` and `--host 0.0.0.0` support.
+- `headless-marauder-web` launcher for Linux and Windows
+- `run-web.sh` / `run-web.bat` dev scripts
+- SECURITY.md, DISCLAIMER.md, CONTRIBUTING.md, this changelog
+- Standalone executables (Windows .exe, Linux x64/ARM64 binaries) on the Releases page — no Python needed
+- `build.py` for local PyInstaller builds
+- GitHub Actions CI to auto-build on each release
 
-### Fixed
-- Browser UI: `flasher.detect_chip()` crash (missing required `on_line` callback)
-- Browser UI: XSS vulnerability via malicious SSIDs in AP/Station tables
-- Browser UI: autolist timer stacking when toggled multiple times
-- Browser UI: keyboard shortcuts (Ctrl+L, Ctrl+.) blocked when raw input focused
+**Fixed:**
+- Web UI: `flasher.detect_chip()` crash from missing callback argument
+- Web UI: XSS through malicious SSIDs in the AP/Station tables
+- Web UI: autolist timer stacking when toggled rapidly
+- Web UI: keyboard shortcuts not working when the command input was focused
 
-### Packaging
-- **Standalone executables** — pre-built Windows `.exe` and Linux binary on the Releases page (no Python required)
-- `build.py` — PyInstaller build script for local builds
-- `.github/workflows/build-release.yml` — CI workflow auto-builds executables on each release
+**Changed:**
+- requirements.txt and pyproject.toml updated for Flask/SocketIO deps
+- Installers now include the web UI launcher
+- README updated with browser UI docs
 
 ## [1.1.0] — 2026-06-08
 
-### Added
-- **Windows support** — `install.bat` with venv, PATH, and Start Menu integration
-- **Cross-platform pip install** — `pip install git+....[all]`
-- `pyproject.toml` with optional dependency groups (`[qt]`, `[tui]`, `[all]`)
-- `install.bat` / `uninstall.bat` for Windows
-- Comprehensive README with install/update/uninstall for Linux, Windows, macOS, pip
+Cross-platform release — Windows support, pip install.
 
-### Changed
-- `install.sh` / `uninstall.sh` updated with TUI launcher
+- Windows installer (`install.bat`) with venv, PATH, Start Menu shortcut
+- `pip install git+....[all]` for cross-platform installs
+- `pyproject.toml` with optional dep groups (`[qt]`, `[tui]`, `[all]`)
+- Updated `install.sh` / `uninstall.sh` with TUI launcher
 
 ## [1.0.1] — 2026-06-08
 
-### Added
-- In-app **Guide tab** with full tool reference
-- `GUIDE.md` — attack chaining tutorial and other-software integration guide
+- In-app Guide tab with full tool reference
+- `GUIDE.md` — attack chaining walkthrough and integration guide for other tools
 - Hover tooltips on all command buttons
 
 ## [1.0.0] — 2026-06-08
 
-### Added
-- Initial release
-- **PyQt5 GUI** — live AP/Station tables, target picker, firmware flasher, logging
-- **Tkinter GUI** — lightweight alternative
-- **Textual TUI** — terminal UI for SSH/headless use
-- `marauder_core` shared library — serial controller, 70+ command catalog, stream parser,
-  firmware flasher (classic ESP32 + S3), capture logger, self-updater
-- Linux installer (`install.sh`) with app menu entry and PATH launchers
-- Auto-detect serial port (115200 baud)
-- `--mock` mode for development without hardware
+Initial release.
+
+- PyQt5 GUI with live AP/Station tables, target picker, firmware flasher, logging
+- Tkinter GUI (lightweight alternative)
+- Textual TUI for terminal/SSH use
+- `marauder_core` shared library — serial controller, 70+ command catalog, stream parser, firmware flasher (ESP32 + S3), capture logger, self-updater
+- Linux installer with app menu entry and PATH launchers
+- Auto-detect serial port at 115200 baud
+- `--mock` mode for dev/demo without hardware
 - MIT License
 
 [1.2.0]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.2.0

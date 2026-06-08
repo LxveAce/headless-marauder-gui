@@ -94,23 +94,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk libxcb-xinerama0 libxcb-cursor0
+          sudo apt-get install -y python3-venv python3-tk python3-pyqt5 \
+            libxcb-xinerama0 libxcb-cursor0 libgl1
 
-      - name: Install dependencies
+      - name: Create venv with system packages
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install PyQt5 pyinstaller
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install pyinstaller
 
       - name: Build binary
-        run: python build.py --onefile
+        run: .venv/bin/python build.py --onefile
 
       - name: Rename artifact
         run: |
