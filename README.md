@@ -45,7 +45,8 @@ Pre-built standalone executables are available on the
 | Platform | File | Notes |
 |----------|------|-------|
 | **Windows** | `headless-marauder-vX.X.X-windows-x64.exe` | Double-click to run. No install. |
-| **Linux** | `headless-marauder-vX.X.X-linux-x64` | `chmod +x` then run. No install. |
+| **Linux x64** | `headless-marauder-vX.X.X-linux-x64` | `chmod +x` then run. Debian, Kali, Ubuntu, etc. |
+| **Linux ARM64** | `headless-marauder-vX.X.X-linux-arm64` | `chmod +x` then run. Raspberry Pi (64-bit OS), ARM SBCs. |
 
 These are self-contained — Python, PyQt5, and all dependencies are bundled inside. Just
 download, run, and connect your ESP32.
@@ -53,6 +54,9 @@ download, run, and connect your ESP32.
 > **Note:** The standalone builds include the **Qt GUI** only. For the TUI, Browser UI,
 > or development use, install from source (below). Updates require downloading the new
 > release — in-app "Check for Updates" is not available in standalone builds.
+>
+> **Raspberry Pi users:** The ARM64 build requires a **64-bit OS** (Raspberry Pi OS 64-bit,
+> Kali ARM 64-bit, Ubuntu ARM). If you're on 32-bit Pi OS, install from source instead.
 
 ---
 
