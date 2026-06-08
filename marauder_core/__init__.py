@@ -1,7 +1,7 @@
 """Shared core for the Headless Marauder apps: serial controller, command catalog,
 parser, flasher, capture logger, and self-updater."""
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .controller import MarauderController
 from .parsing import MarauderParser, AP, Station
