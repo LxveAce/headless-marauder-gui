@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "headless-marauder"
+version = "1.0.0"
+description = "Native control + firmware flasher for a headless ESP32 Marauder"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "LxveAce"}]
+keywords = ["esp32", "marauder", "wifi", "bluetooth", "security", "serial", "flasher"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications :: Qt",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    "pyserial>=3.5",
+    "esptool>=4.7,<6",
+]
+
+[project.optional-dependencies]
+qt = ["PyQt5>=5.15"]
+tui = ["textual>=0.50"]
+all = ["PyQt5>=5.15", "textual>=0.50"]
+
+[project.urls]
+Homepage = "https://github.com/LxveAce/headless-marauder-gui"
+Repository = "https://github.com/LxveAce/headless-marauder-gui"
+Issues = "https://github.com/LxveAce/headless-marauder-gui/issues"
+
+[project.scripts]
+headless-marauder-tk = "gui.app:main"
+headless-marauder-tui = "tui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["marauder_core*", "gui*", "gui_qt*", "tui*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "*.svg"]
