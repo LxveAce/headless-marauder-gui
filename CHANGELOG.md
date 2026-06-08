@@ -29,6 +29,17 @@ All notable changes to Headless Marauder are documented here.
 - Updated installers to include web UI launcher
 - Updated `README.md` with Browser UI documentation
 
+### Fixed
+- Browser UI: `flasher.detect_chip()` crash (missing required `on_line` callback)
+- Browser UI: XSS vulnerability via malicious SSIDs in AP/Station tables
+- Browser UI: autolist timer stacking when toggled multiple times
+- Browser UI: keyboard shortcuts (Ctrl+L, Ctrl+.) blocked when raw input focused
+
+### Packaging
+- **Standalone executables** — pre-built Windows `.exe` and Linux binary on the Releases page (no Python required)
+- `build.py` — PyInstaller build script for local builds
+- `.github/workflows/build-release.yml` — CI workflow auto-builds executables on each release
+
 ## [1.1.0] — 2026-06-08
 
 ### Added
