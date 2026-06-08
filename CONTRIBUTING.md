@@ -1,11 +1,11 @@
-# Contributing to Headless Marauder
+# Contributing
 
-Contributions are welcome — bug reports, feature requests, code, documentation, and testing.
+Bug reports, feature requests, and PRs are all welcome.
 
-## Getting Started
+## Setup
 
-1. Fork the repo and clone your fork
-2. Create a venv and install dev dependencies:
+1. Fork and clone
+2. Set up a venv:
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate        # Linux/macOS
@@ -20,59 +20,41 @@ Contributions are welcome — bug reports, feature requests, code, documentation
    python web/app.py --mock
    ```
 
-## Reporting Bugs
+## Reporting bugs
 
-Open a [GitHub issue](https://github.com/LxveAce/headless-marauder-gui/issues) with:
+Open a [GitHub issue](https://github.com/LxveAce/headless-marauder-gui/issues). Include your OS, Python version, steps to reproduce, and any tracebacks. If it's hardware-related, mention your board type (classic ESP32, S3, etc.).
 
-- OS and Python version
-- Steps to reproduce
-- Expected vs actual behavior
-- Console output / tracebacks if applicable
-- Board type (classic ESP32, S3, etc.) if hardware-related
+## Pull requests
 
-## Submitting Changes
+- Branch off `main`, keep commits focused
+- If your change touches `marauder_core/`, test it across all four UIs (Qt, Tk, TUI, Web)
+- Update `GUIDE.md` if you add or change commands
+- Open a PR with a clear description
 
-1. Create a feature branch from `main`
-2. Keep commits focused — one logical change per commit
-3. Test all four UIs if your change touches `marauder_core/` (Qt, Tkinter, TUI, Web)
-4. Update `GUIDE.md` if you add or change commands
-5. Open a PR against `main` with a clear description of what and why
+## Code style
 
-## Code Style
+Python 3.9+. Follow whatever patterns are already in the code — it's kept pretty straightforward on purpose. Don't over-engineer things or add dependencies for stuff the stdlib handles fine.
 
-- Python 3.9+ compatible
-- No type stubs required, but type hints are welcome
-- Follow existing patterns — the codebase is intentionally straightforward
-- No unnecessary abstractions or over-engineering
-- Keep dependencies minimal — don't add a package for something the stdlib handles
+## Adding commands
 
-## Adding Commands
+New Marauder commands go in `marauder_core/commands.py` — add a `Command(...)` to the right category in `build()`. All four UIs pick it up automatically from there.
 
-New Marauder commands go in `marauder_core/commands.py`. Add a `Command(...)` entry to
-the appropriate category in `build()`. All four UIs pick it up automatically — the
-command catalog is the single source of truth.
-
-## Architecture
+## Project layout
 
 ```
-marauder_core/     Shared library — controller, parser, commands, flasher, capture, updater
-gui_qt/            PyQt5 GUI (recommended desktop UI)
-gui/               Tkinter GUI (lightweight alternative)
+marauder_core/     Shared library (controller, parser, commands, flasher, capture, updater)
+gui_qt/            PyQt5 desktop GUI
+gui/               Tkinter GUI
 tui/               Textual terminal UI
 web/               Flask + SocketIO browser UI
 ```
 
-All four front-ends import from `marauder_core` and follow the same pattern: connect,
-subscribe to serial events, render output, send commands. If you're adding a feature
-to the core, it should work across all UIs. If it's UI-specific, keep it in that UI's
-directory.
+All four front-ends import from `marauder_core` and follow the same pattern. Core features should work across all UIs; UI-specific stuff stays in that UI's folder.
 
-## Security Vulnerabilities
+## Security issues
 
-Do **not** open a public issue for security vulnerabilities. See [SECURITY.md](SECURITY.md)
-for responsible disclosure instructions.
+Don't open a public issue for security bugs. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the
-[MIT License](LICENSE).
+Contributions are licensed under [MIT](LICENSE).

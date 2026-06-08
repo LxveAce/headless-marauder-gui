@@ -1,77 +1,26 @@
 # Security Policy
 
-## Supported Versions
+Only the latest release (1.2.x) gets security patches. If you're on an older version, update first.
 
-| Version | Supported |
-|---------|-----------|
-| 1.2.x   | Yes       |
-| 1.1.x   | No        |
-| 1.0.x   | No        |
+## Reporting a vulnerability
 
-Only the latest release receives security patches. Update with `git pull` or in-app
-**Help > Check for Updates**.
+**Don't open a public issue.** Instead:
 
-## Reporting a Vulnerability
+1. Use [GitHub Security Advisories](https://github.com/LxveAce/headless-marauder-gui/security/advisories) (preferred), or
+2. Email **extrafadexd@gmail.com** with `[SECURITY] headless-marauder-gui` in the subject.
 
-If you discover a security vulnerability in Headless Marauder, **do not open a public issue.**
+Include what you found, how to reproduce it, and which version you're running. I'll acknowledge it within a couple days and try to get a patch out within two weeks for anything serious.
 
-Instead, report it privately:
+## What counts
 
-1. **GitHub Security Advisories (preferred):** Go to the
-   [Security tab](https://github.com/LxveAce/headless-marauder-gui/security/advisories)
-   of this repository and click **"Report a vulnerability"**.
-2. **Email:** Send details to **extrafadexd@gmail.com** with the subject line
-   `[SECURITY] headless-marauder-gui`.
+Bugs in this project's Python code — command injection, path traversal in logging/flashing, XSS or access issues in the web UI, unsafe data handling, that kind of thing.
 
-Include as much of the following as possible:
+What doesn't count: bugs in the Marauder firmware itself (report those [upstream](https://github.com/justcallmekoko/ESP32Marauder)), issues in third-party deps that we can't realistically mitigate, social engineering, physical access to the ESP32, or stuff that requires the attacker to already have code execution on the host.
 
-- Description of the vulnerability
-- Steps to reproduce
-- Affected version(s)
-- Potential impact
-- Suggested fix (if any)
+## A note about the web UI
 
-## Response Timeline
+The browser UI binds to `127.0.0.1:5000` by default — localhost only, no auth. That's intentional. If you pass `--host 0.0.0.0` to expose it on your LAN, anyone on the network can control the board. That's a documented tradeoff, not a vulnerability. If you need LAN access with auth, stick a reverse proxy in front of it.
 
-- **Acknowledgment:** within 48 hours
-- **Initial assessment:** within 7 days
-- **Patch release:** as soon as a fix is verified, typically within 14 days for critical issues
+## Disclosure
 
-## Scope
-
-The following are **in scope** for security reports:
-
-- Code execution vulnerabilities in the Python application
-- Command injection through serial input/output handling
-- Path traversal in log file writing or firmware flashing
-- Unsafe deserialization or data handling
-- Web UI (Flask/SocketIO) vulnerabilities — XSS, CSRF, unauthorized access when
-  bound to `0.0.0.0`
-- Dependencies with known CVEs that affect this project's usage
-
-The following are **out of scope:**
-
-- Vulnerabilities in the ESP32 Marauder firmware itself (report those to
-  [justcallmekoko/ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder))
-- Vulnerabilities in upstream dependencies where this project uses them as intended
-  and cannot mitigate the issue
-- Social engineering attacks
-- Physical access attacks against the ESP32 hardware
-- Issues that require the attacker to already have code execution on the host machine
-
-## Web UI Security Notes
-
-The Browser UI (`headless-marauder-web`) binds to **localhost only** (`127.0.0.1:5000`)
-by default. This is intentional — the web interface has no authentication layer and
-provides direct serial access to the connected ESP32.
-
-If you bind to `0.0.0.0` (LAN access), understand that **anyone on your network can
-control the board**. This is documented behavior, not a vulnerability. If you need
-LAN access with authentication, consider placing it behind a reverse proxy with
-HTTP basic auth or similar.
-
-## Disclosure Policy
-
-We follow coordinated disclosure. Once a fix is released, the vulnerability will be
-publicly documented in the release notes and (if applicable) a GitHub Security Advisory.
-We ask that reporters allow up to 14 days for a patch before public disclosure.
+I follow coordinated disclosure. Once a fix ships, the vulnerability gets documented in the release notes. I'd appreciate a heads-up before going public — ideally give me two weeks to patch.

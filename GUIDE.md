@@ -1,40 +1,36 @@
 # Headless Marauder — Field Guide
 
-What every tool does, how to drive the app, and **how to chain scanning + attacks together and
-feed the results into other software**. For authorized testing only (see [Legal](#legal)).
+What every tool does, how to use the app, and how to chain scans + attacks together and feed the output into other software. For authorized testing only (see [Legal](#legal)).
 
 ---
 
-## 1. The mental model
+## 1. How it works
 
-The ESP32 board runs the **Marauder firmware**. This app is a **remote control** for it over USB
-serial — every button just sends a text command and shows what the board prints back. So the loop
-is always the same:
+The ESP32 runs Marauder firmware. This app is just a remote control over USB serial — every button sends a text command and shows what the board prints back. The workflow is always:
 
 ```
         ┌─────────── recon ───────────┐         ┌──── act ────┐
   scan  →  list  →  (tables fill)  →  select  →  attack / sniff / capture  →  STOP
 ```
 
-1. **Scan** to discover things (APs, stations, BLE).
-2. **List** to pull the indexed results (the app auto-does this — tables fill themselves).
-3. **Select** the target(s) from the picker.
-4. **Act** — deauth, sniff a handshake, evil portal, etc.
-5. **STOP** (scans and attacks run forever until you stop them).
+1. **Scan** to find things (APs, stations, BLE devices).
+2. **List** to pull indexed results (the app does this automatically — tables fill themselves).
+3. **Select** your target(s) from the picker.
+4. **Act** — deauth, sniff a handshake, evil portal, whatever.
+5. **STOP** — scans and attacks run until you stop them.
 
-> **Tooltips:** hover any command button to see what it does and whether it's an attack /
-> runs-until-STOP. *Help → Command Reference* lists them all inside the app.
+> Hover any command button for a description. *Help → Command Reference* lists everything.
 
 ---
 
 ## 2. Using the app
 
 - **Connect** — auto-detects the board (115200 baud). Green = connected.
-- **Scan APs** → the **Access Points** tab fills automatically (Auto-list on).
+- **Scan APs** → Access Points tab fills automatically (auto-list is on by default).
 - **STOP** → ends the scan.
-- **Select APs / Select Stations** → tick targets in the picker (it builds the right `select -a 0,2,5`).
+- **Select APs / Select Stations** → tick targets in the picker (builds the right `select -a 0,2,5`).
 - Run an action (e.g. **Deauth (selected APs)**).
-- **● Log** → record everything to a folder (see [§5](#5-data--logging)).
+- **● Log** → records everything to a folder (see [§5](#5-data--logging)).
 - **⚡ Flash Firmware** → detect chip, fetch firmware, flash.
 - **Raw box** (bottom) → type any command the buttons don't cover.
 
@@ -42,162 +38,158 @@ Keyboard: `Ctrl+L` clear · `F5` refresh ports · `Ctrl+K` command box · `Ctrl+
 
 ---
 
-## 3. What each tool does
+## 3. Command reference
 
-(Generated from the live command catalog. "runs until STOP" = continuous; "attack" = offensive.)
+All commands from the Marauder CLI. "runs until STOP" means it keeps going until you stop it. "attack" means offensive — rendered in red, confirmed before sending.
 
 ### WiFi · Scan
 
 | Command | Sends | What it does |
 |---|---|---|
-| Scan APs | `scanap` | Discover nearby access points. _(runs until STOP)_ |
-| Scan Stations | `scansta` | Find client stations (run scanap first). _(runs until STOP)_ |
-| Scan All | `scanall` | Scan APs and stations together. _(runs until STOP)_ |
-| Signal Monitor | `sigmon` | Live signal-strength monitor for a target. _(runs until STOP)_ |
-| Packet Count | `packetcount` | Live packets-per-second counter. _(runs until STOP)_ |
-| MAC Track | `mactrack` | Track signal strength of selected MAC(s) — proximity/"hot-cold". _(runs until STOP)_ |
-| Wardrive | `wardrive` | GPS-tagged AP logging to SD (WiGLE CSV). _(runs until STOP)_ |
+| Scan APs | `scanap` | Find nearby access points. _(runs until STOP)_ |
+| Scan Stations | `scansta` | Find client devices (run scanap first). _(runs until STOP)_ |
+| Scan All | `scanall` | APs and stations together. _(runs until STOP)_ |
+| Signal Monitor | `sigmon` | Live signal strength for a target. _(runs until STOP)_ |
+| Packet Count | `packetcount` | Packets-per-second counter. _(runs until STOP)_ |
+| MAC Track | `mactrack` | Track signal strength of a MAC — proximity/hot-cold. _(runs until STOP)_ |
+| Wardrive | `wardrive` | GPS-tagged AP logging to SD card (WiGLE CSV format). _(runs until STOP)_ |
 
 ### WiFi · Sniff
 
 | Command | Sends | What it does |
 |---|---|---|
-| Sniff Raw | `sniffraw` | Capture raw 802.11 frames → PCAP. _(runs until STOP)_ |
+| Sniff Raw | `sniffraw` | Capture raw 802.11 frames to PCAP. _(runs until STOP)_ |
 | Sniff Beacons | `sniffbeacon` | Capture beacon frames. _(runs until STOP)_ |
 | Sniff Probes | `sniffprobe` | Capture probe requests (what devices are looking for). _(runs until STOP)_ |
-| Sniff Deauth | `sniffdeauth` | Detect deauth frames (defensive — spot someone attacking). _(runs until STOP)_ |
-| Sniff ESP | `sniffesp` | Detect ESP-based devices. _(runs until STOP)_ |
-| Sniff Pwnagotchi | `sniffpwn` | Detect nearby Pwnagotchi units. _(runs until STOP)_ |
-| Sniff PMKID | `sniffpmkid` | Capture PMKID/EAPOL handshakes → PCAP (crackable). _(runs until STOP)_ |
+| Sniff Deauth | `sniffdeauth` | Detect deauth frames — useful defensively. _(runs until STOP)_ |
+| Sniff ESP | `sniffesp` | Detect ESP-based devices nearby. _(runs until STOP)_ |
+| Sniff Pwnagotchi | `sniffpwn` | Detect Pwnagotchi units. _(runs until STOP)_ |
+| Sniff PMKID | `sniffpmkid` | Capture PMKID/EAPOL handshakes to PCAP (crackable). _(runs until STOP)_ |
 
 ### WiFi · Attack
 
 | Command | Sends | What it does |
 |---|---|---|
-| Deauth (selected APs) | `attack -t deauth` | Kick all clients off the selected AP(s). _(attack)_ |
-| Deauth (selected clients) | `attack -t deauth -c` | Kick only the selected client(s). _(attack)_ |
+| Deauth (selected APs) | `attack -t deauth` | Kick all clients off selected AP(s). _(attack)_ |
+| Deauth (selected clients) | `attack -t deauth -c` | Kick specific clients only. _(attack)_ |
 | Beacon Spam (list) | `attack -t beacon -l` | Broadcast SSIDs from your list. _(attack)_ |
 | Beacon Spam (random) | `attack -t beacon -r` | Broadcast random SSIDs. _(attack)_ |
-| Beacon Spam (clone APs) | `attack -t beacon -a` | Clone scanned APs' names. _(attack)_ |
+| Beacon Spam (clone APs) | `attack -t beacon -a` | Clone scanned AP names. _(attack)_ |
 | Probe Flood | `attack -t probe` | Flood probe requests. _(attack)_ |
-| Rickroll Beacon | `attack -t rickroll` | Beacon-spam lyrics as SSIDs. _(attack)_ |
-| Bad Msg (clients) | `attack -t badmsg -c` | Malformed-frame attack on selected clients. _(attack)_ |
-| Evil Portal | `evilportal -c start` | Captive-portal credential harvester (needs SD HTML). _(attack)_ |
-| Karma | `karma` | Answer a device's probe to lure it to connect. _(attack)_ |
+| Rickroll Beacon | `attack -t rickroll` | Beacon-spam Rick Astley lyrics as SSIDs. _(attack)_ |
+| Bad Msg (clients) | `attack -t badmsg -c` | Malformed frames at selected clients. _(attack)_ |
+| Evil Portal | `evilportal -c start` | Captive portal credential harvester (needs HTML on SD). _(attack)_ |
+| Karma | `karma` | Answer a device's probe to lure it onto your AP. _(attack)_ |
 
 ### Bluetooth
 
 | Command | Sends | What it does |
 |---|---|---|
-| Sniff Bluetooth | `sniffbt` | Scan BLE devices; filter `airtag` / `flipper` / `flock`. _(runs until STOP)_ |
+| Sniff Bluetooth | `sniffbt` | Scan BLE devices; filter `airtag`/`flipper`/`flock`. _(runs until STOP)_ |
 | BT Wardrive | `btwardrive` | GPS-tagged Bluetooth logging. _(runs until STOP)_ |
 | Detect Skimmers | `sniffskim` | Scan for card-skimmer BLE signatures. _(runs until STOP)_ |
 | BLE Spam | `blespam -t <type>` | Spam BLE pairing pop-ups (sourapple/applejuice/google/samsung/windows/flipper/all). _(attack)_ |
 | Spoof AirTag | `spoofat` | Broadcast a cloned AirTag. _(attack)_ |
-| Sour Apple / Swiftpair / Samsung / Spam All | `sourapple` … | Targeted BLE pop-up spam. _(attack)_ |
+| Sour Apple / Swiftpair / Samsung / Spam All | `sourapple` … | Targeted BLE spam. _(attack)_ |
 
-### Lists & Targets · SSID · Channel · GPS · Files · System
+### Everything else
 
-`list -a/-c/-s/-t` (show) · `select -a/-c/-s/-f` (choose) · `clearlist` · `info` ·
-`ssid -a/-r` (manage spam SSID list) · `channel [-s n]` · `gpsdata`/`nmea`/`gps -g` ·
-`ls`/`save`/`load` (SD) · `settings -s <name> enable/disable` (e.g. **SavePCAP**) · `led` · `reboot` · `stopscan`.
+`list -a/-c/-s/-t` (show lists) · `select -a/-c/-s/-f` (pick targets) · `clearlist` · `info` ·
+`ssid -a/-r` (manage SSID list) · `channel [-s n]` · `gpsdata`/`nmea`/`gps -g` ·
+`ls`/`save`/`load` (SD card) · `settings -s <name> enable/disable` (e.g. SavePCAP) · `led` · `reboot` · `stopscan`.
 
-> The full list (with every flag) is in *Help → Command Reference* and in
+> Full list with every flag is in *Help → Command Reference* and in
 > [`marauder_core/commands.py`](marauder_core/commands.py).
 
 ---
 
-## 4. Combining tools into bigger operations
+## 4. Attack chains
 
-This is where it gets powerful — recon feeds targeting, targeting feeds attacks, and attacks feed
-capture you finish in other software.
+This is where it gets interesting — recon feeds targeting, targeting feeds attacks, and the captures feed into other tools.
 
-### A. Capture a WPA handshake, then crack it offline
-The classic chain — deauth forces clients to re-handshake, which you capture, then crack on a PC.
+### A. Capture a WPA handshake and crack it
+
+The classic chain. Deauth forces clients to re-handshake, you capture it, crack offline.
+
 1. `settings -s SavePCAP enable` (once) and insert a FAT32 SD card.
-2. **Scan APs** → **Select APs** (your target).
-3. **Sniff PMKID** (`sniffpmkid`) — or `sniffpmkid -d` to **deauth while sniffing** so clients
-   reconnect and you grab the handshake faster.
+2. **Scan APs** → **Select APs** (pick your target).
+3. **Sniff PMKID** (`sniffpmkid`) — or `sniffpmkid -d` to deauth while sniffing so clients reconnect faster.
 4. **STOP**. The `.pcap` is on the SD card.
-5. On a PC: open in **Wireshark**, or crack with **hashcat**/**aircrack-ng**:
+5. On your PC:
    ```bash
    hcxpcapngtool -o hash.hc22000 capture.pcap     # convert
    hashcat -m 22000 hash.hc22000 wordlist.txt     # crack
-   # or:  aircrack-ng -w wordlist.txt capture.pcap
+   # or: aircrack-ng -w wordlist.txt capture.pcap
    ```
 
-### B. Recon → targeted deauth
-1. **Scan All** (`scanall`) to map APs *and* their clients.
-2. **Select Stations** → pick a specific client.
-3. **Deauth (selected clients)** to knock just that device off (surgical, vs. broadcast).
+### B. Targeted deauth (surgical)
+
+1. **Scan All** (`scanall`) to map APs and their clients at the same time.
+2. **Select Stations** → pick a specific device.
+3. **Deauth (selected clients)** — drops just that one device instead of blasting everyone.
 
 ### C. Evil Portal credential capture
+
 1. Put your `index.html` (and optional `ap.config.txt`) on the SD card.
-2. **Scan APs** → **Select APs** (the AP to impersonate).
-3. **Evil Portal** (`evilportal -c start`) — enable EPDeauth in settings to deauth the real AP so
-   clients land on yours. Captured credentials are written to the SD card.
+2. **Scan APs** → **Select APs** (the AP you're impersonating).
+3. **Evil Portal** (`evilportal -c start`) — turn on EPDeauth in settings to knock clients off the real AP so they land on yours. Creds get saved to SD.
 
-### D. Wardriving → map it on WiGLE
-1. Plug in GPS (the deck shares one GPS via `gpsd`).
-2. **Wardrive** (`wardrive`) while moving — writes a **WiGLE-format CSV** (`wardrive_*.csv`) to SD.
-3. Upload that CSV to **wigle.net** (counts toward your stats / builds a coverage map).
+### D. Wardriving
 
-### E. Find who's following you (BLE)
-1. **Sniff Bluetooth** `sniffbt -t airtag` to surface trackers; `-t flock` for Flock cameras.
-2. **MAC Track** a suspicious MAC to gauge proximity as you move.
-3. Correlate sightings over time/location with **Chasing Your Tail NG** on the Pi (see the cyberdeck).
+1. Plug in GPS (the deck can share one GPS via `gpsd`).
+2. **Wardrive** (`wardrive`) while moving — writes a WiGLE-format CSV to SD.
+3. Upload that CSV to [wigle.net](https://wigle.net) for mapping.
 
-### F. Probe-sniff → Karma lure
-1. **Sniff Probes** to learn which SSIDs nearby devices are searching for.
+### E. Tracker detection (BLE)
+
+1. **Sniff Bluetooth** `sniffbt -t airtag` to find trackers; `-t flock` for Flock cameras.
+2. **MAC Track** a suspicious MAC to see if it follows you.
+
+### F. Probe-sniff into Karma
+
+1. **Sniff Probes** to see what SSIDs nearby devices are searching for.
 2. Add those to your SSID list (`ssid -a -n <name>`).
-3. **Karma** to answer those probes and lure devices to associate.
+3. **Karma** to answer those probes and get devices to connect.
 
 ---
 
-## 5. Data & logging (feed other software / the connected device)
+## 5. Data & logging
 
-Turn on **● Log** (or `--log [dir]`, default `~/marauder-logs`). It writes, live:
+Turn on **● Log** (or pass `--log [dir]`, defaults to `~/marauder-logs`). It writes in real-time:
 
-| File | Format | Use it for |
+| File | Format | Good for |
 |---|---|---|
-| `serial-<ts>.log` | raw text | `tail -f` it from another terminal/box; grep; replay |
-| `latest.json` | JSON snapshot | poll it from a script/app for current APs+stations+status |
-| `aps.csv` / `stations.csv` | CSV | import to a spreadsheet / pandas / your own dashboard |
+| `serial-<ts>.log` | Raw text | `tail -f` from another terminal; grep; replay |
+| `latest.json` | JSON | Poll from a script for current APs + stations + status |
+| `aps.csv` / `stations.csv` | CSV | Import into a spreadsheet, pandas, whatever |
 
-Everything is atomic + append-only, so **another process or device can read it while the app runs**:
+Files are atomic and append-only, so another process can read them while the app is running:
+
 ```bash
 tail -f ~/marauder-logs/serial-*.log                 # live stream
 watch -n1 'jq ".ap_count,.station_count" ~/marauder-logs/latest.json'
-python3 -c "import json;print(json.load(open('~/marauder-logs/latest.json'.replace('~',__import__('os').path.expanduser('~'))))['aps'][:3])"
 ```
-PCAP/Evil-Portal/wardrive output lives on the **board's SD card** (pull it over USB or `ls`/`save`).
+
+PCAP, evil portal captures, and wardrive CSVs live on the board's SD card (use `ls` / `save` to manage).
 
 ---
 
-## 6. Using it with the rest of your kit
+## 6. Works with
 
-- **The cyberdeck dashboard** — `marauder_core` is importable; the deck's
-  [dashboard](https://github.com/LxveAce/Projects/tree/main/projects/14-cyberdeck/integrations/parts/dashboard)
-  reuses it to show Marauder beside Kismet/Meshtastic/GPS.
-- **Kismet** — run Kismet on the Pi for deep WiFi mapping while Marauder does active attacks; both
-  can share the **same GPS** via `gpsd` (`localhost:2947`).
-- **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking (chain A).
-- **WiGLE** — wardrive CSVs (chain D).
-- **Flipper Zero** — pair sub-GHz/RFID/NFC/IR work (Flipper) with WiFi/BLE (this) for full coverage.
+- **The cyberdeck** — `marauder_core` is importable; the deck's dashboard reuses it alongside Kismet, Meshtastic, and GPS.
+- **Kismet** — run it on the Pi for passive WiFi mapping while Marauder handles active attacks. Both can share GPS via `gpsd`.
+- **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking.
+- **WiGLE** — for wardrive map uploads.
+- **Flipper Zero** — pair sub-GHz/RFID/NFC/IR work with WiFi/BLE from this.
 
 ---
 
-## 7. Flashing (built in)
+## 7. Flashing
 
-⚡ **Flash Firmware** → **Detect chip** → **Load release list** → pick a variant →
-**Update app only** (existing board) or **Full flash** (blank board). Uses `esptool` with
-`--flash_size detect`. Classic ESP32 Gold → a non-S3 variant (e.g. *old_hardware*); S3 → *MultiBoard S3*.
+⚡ **Flash Firmware** → **Detect chip** → **Load release list** → pick a variant → **Update app only** or **Full flash**. Uses `esptool` with `--flash_size detect`. Classic ESP32 (Gold) → a non-S3 variant (usually *old_hardware*); S3 → *MultiBoard S3*.
 
 ---
 
 ## Legal
 
-For **authorized security testing only** — networks/devices you own or have **written permission**
-to test. Deauth, evil-portal, beacon/BLE spam, and karma can be illegal against others (US CFAA,
-FCC rules, and equivalents). Many modern networks ignore deauth (802.11w/PMF). You are responsible
-for your use. See the firmware's own [legal notes](https://github.com/justcallmekoko/ESP32Marauder).
+**Authorized testing only** — networks and devices you own or have written permission to test. Deauth, evil portals, beacon/BLE spam, and karma can be illegal against other people's stuff. Many modern networks ignore deauth anyway (802.11w/PMF). You are responsible for what you do. See the firmware's own [legal notes](https://github.com/justcallmekoko/ESP32Marauder).
