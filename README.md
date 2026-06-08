@@ -262,20 +262,42 @@ install.sh       Linux installer (app menu + PATH launchers + venv)
 install.bat      Windows installer (Start Menu + PATH launchers + venv)
 ```
 
-One command catalog and one parser feed all three front-ends; the serial layer streams to the UI, the parser, and the logger together.
+One command catalog and one parser feed all four front-ends; the serial layer streams to the UI, the parser, and the logger together.
 
 ---
 
-## Legal
+## Legal & Liability
 
-For **authorized security testing only** — use against networks and devices you own or have
-explicit written permission to test. WiFi deauthentication, evil-portal, and BLE-spam features can
-be illegal to use against others (e.g. US CFAA, FCC rules). You are responsible for how you use this.
+**For authorized security testing only.** Use against networks and devices you own or have
+explicit written permission to test. WiFi deauthentication, evil-portal, and BLE-spam features
+can be illegal to use against others (e.g. US CFAA, FCC Part 15, UK Computer Misuse Act, EU
+Directive 2013/40/EU). **You are solely responsible for how you use this tool.**
+
+This software is provided "as is" with no warranty. The author(s) accept no liability for
+damages or legal consequences arising from its use or misuse.
+
+**Read the full [Disclaimer & Liability Notice](DISCLAIMER.md) before use.**
+
+---
+
+## Security
+
+Found a vulnerability? **Do not open a public issue.** See [SECURITY.md](SECURITY.md) for
+responsible disclosure instructions.
+
+---
+
+## Contributing
+
+Bug reports, feature requests, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for guidelines, code style, and architecture notes.
+
+---
 
 ## Credits & License
 
 - Firmware: **[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder)** by justcallmekoko (GPL) — this app only talks to it over serial.
-- Built on [pyserial](https://pyserial.readthedocs.io/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/), [Textual](https://textual.textualize.io/), and [esptool](https://github.com/espressif/esptool).
+- Built on [pyserial](https://pyserial.readthedocs.io/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/), [Textual](https://textual.textualize.io/), [Flask](https://flask.palletsprojects.com/), and [esptool](https://github.com/espressif/esptool).
 - Part of the [Cyberdeck project](https://github.com/LxveAce/Projects/tree/main/projects/14-cyberdeck).
 
-Licensed under the **[MIT License](LICENSE)**.
+Licensed under the **[MIT License](LICENSE)** — see [CHANGELOG.md](CHANGELOG.md) for version history.
