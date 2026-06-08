@@ -95,7 +95,7 @@ if not errorlevel 1 (
 
 echo.
 echo ============================================================
-echo  [+] Installed %NAME% v1.0.0
+echo  [+] Installed %NAME% v1.2.0
 echo ============================================================
 echo.
 echo  Run from anywhere (open a NEW terminal first):
