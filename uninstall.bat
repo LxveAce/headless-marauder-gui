@@ -10,6 +10,7 @@ echo [*] Removing launchers from %BINDIR%...
 del /q "%BINDIR%\%APP%.bat" 2>nul
 del /q "%BINDIR%\%APP%-tk.bat" 2>nul
 del /q "%BINDIR%\%APP%-tui.bat" 2>nul
+del /q "%BINDIR%\%APP%-web.bat" 2>nul
 
 echo [*] Removing Start Menu shortcut...
 powershell -NoProfile -Command ^

@@ -22,7 +22,7 @@ in any environment (and can auto-start headless on a deck).
 
 ## Features
 
-- **Three front-ends, one core** — a polished **PyQt5 GUI** (recommended), a simple **Tkinter GUI**, and a **Textual TUI** for the terminal/SSH.
+- **Four front-ends, one core** — a polished **PyQt5 GUI** (recommended), a simple **Tkinter GUI**, a **Textual TUI** for the terminal/SSH, and a **Browser UI** (localhost Flask + WebSocket) for any device with a web browser.
 - **Every Marauder command** (70+) as buttons/tree entries, with parameter forms, plus a raw command box for anything.
 - **Live tables** — `scanap` auto-fills the **Access Points** tab (and the TUI table); APs/Stations parsed straight off the serial stream and de-duplicated.
 - **Target picker** — click *Select APs* and check the networks you want; it builds the correct `select -a 0,2,5` from Marauder's real indices (manual entry still available).
@@ -45,8 +45,8 @@ cd headless-marauder-gui
 ./install.sh
 ```
 
-This creates a venv, installs all dependencies (PyQt5, esptool, textual), and adds:
-- `headless-marauder` command (Qt GUI) and `headless-marauder-tui` (terminal UI) to `~/.local/bin`
+This creates a venv, installs all dependencies (PyQt5, esptool, textual, flask), and adds:
+- `headless-marauder` (Qt GUI), `headless-marauder-tui` (terminal), and `headless-marauder-web` (browser) to `~/.local/bin`
 - A **"Headless Marauder"** entry in your application menu
 
 Give yourself serial access without `sudo` (once, then re-login):
@@ -64,8 +64,8 @@ cd headless-marauder-gui
 install.bat
 ```
 
-This creates a venv, installs all dependencies (PyQt5, esptool), and adds:
-- `headless-marauder`, `headless-marauder-tk`, and `headless-marauder-tui` commands to your PATH
+This creates a venv, installs all dependencies (PyQt5, esptool, flask), and adds:
+- `headless-marauder`, `headless-marauder-tk`, `headless-marauder-tui`, and `headless-marauder-web` commands to your PATH
 - A **Start Menu shortcut**
 
 > **Open a new terminal** after install for the PATH to take effect.
@@ -187,6 +187,12 @@ Then delete the `headless-marauder-gui` folder manually.
 4. **Select APs** — tick the network(s) in the picker > it sends `select -a ...`.
 5. Run an action — e.g. **Deauth (selected APs)** (leave `src`/`dst` blank for a normal broadcast deauth).
 
+### Browser UI
+
+Run `headless-marauder-web` (or `python web/app.py`) and open **http://localhost:5000** in any browser. Same features as the desktop GUIs — command sidebar, live console, AP/Station tables, parameter forms, auto-list, logging toggle, and keyboard shortcuts (`Ctrl+L` clear, `Ctrl+K` focus command box, `Ctrl+.` STOP). The raw command box supports up/down arrow history.
+
+The web UI binds to **localhost only** by default (not exposed to the network). To allow access from other devices on your LAN (e.g. a phone), pass `--host 0.0.0.0`.
+
 ### Keyboard shortcuts (Qt GUI)
 
 | Shortcut | Action |
@@ -251,6 +257,7 @@ marauder_core/   controller.py  parsing.py  commands.py  flasher.py  capture.py 
 gui_qt/app.py    PyQt5 GUI (live tables, picker, flasher, logging)   <-- recommended
 gui/app.py       Tkinter GUI (simple, stdlib)
 tui/app.py       Textual terminal UI
+web/app.py       Browser UI (Flask + SocketIO at localhost:5000)
 install.sh       Linux installer (app menu + PATH launchers + venv)
 install.bat      Windows installer (Start Menu + PATH launchers + venv)
 ```

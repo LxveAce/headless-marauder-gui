@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "headless-marauder"
-version = "1.0.0"
+version = "1.2.0"
 description = "Native control + firmware flasher for a headless ESP32 Marauder"
 readme = "README.md"
 license = {text = "MIT"}
@@ -36,7 +36,8 @@ dependencies = [
 [project.optional-dependencies]
 qt = ["PyQt5>=5.15"]
 tui = ["textual>=0.50"]
-all = ["PyQt5>=5.15", "textual>=0.50"]
+web = ["flask>=3.0", "flask-socketio>=5.3"]
+all = ["PyQt5>=5.15", "textual>=0.50", "flask>=3.0", "flask-socketio>=5.3"]
 
 [project.urls]
 Homepage = "https://github.com/LxveAce/headless-marauder-gui"
@@ -46,9 +47,10 @@ Issues = "https://github.com/LxveAce/headless-marauder-gui/issues"
 [project.scripts]
 headless-marauder-tk = "gui.app:main"
 headless-marauder-tui = "tui.app:main"
+headless-marauder-web = "web.app:main"
 
 [tool.setuptools.packages.find]
-include = ["marauder_core*", "gui*", "gui_qt*", "tui*"]
+include = ["marauder_core*", "gui*", "gui_qt*", "tui*", "web*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.md", "*.svg"]

@@ -59,6 +59,12 @@ echo cd /d "%HERE%"
 echo "%HERE%\.venv\Scripts\python.exe" "%HERE%\tui\app.py" %%*
 ) > "%BINDIR%\%APP%-tui.bat"
 
+(
+echo @echo off
+echo cd /d "%HERE%"
+echo "%HERE%\.venv\Scripts\python.exe" "%HERE%\web\app.py" %%*
+) > "%BINDIR%\%APP%-web.bat"
+
 REM 5. Add to user PATH if not already there
 echo %PATH% | findstr /i /c:"%BINDIR%" >nul 2>&1
 if errorlevel 1 (
@@ -97,6 +103,7 @@ echo.
 echo    headless-marauder          PyQt5 GUI (recommended)
 echo    headless-marauder-tk       Tkinter GUI (lightweight)
 echo    headless-marauder-tui      Terminal UI (SSH-friendly)
+echo    headless-marauder-web      Browser UI (localhost:5000)
 echo.
 echo  Update:
 echo    cd %HERE%
