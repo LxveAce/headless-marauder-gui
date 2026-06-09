@@ -49,7 +49,12 @@ cat > "$HOME/.local/bin/${APP}-tui" <<EOF
 cd "$HERE"
 exec "$HERE/.venv/bin/python" "$HERE/tui/app.py" "\$@"
 EOF
-chmod +x "$HOME/.local/bin/$APP" "$HOME/.local/bin/${APP}-tui"
+cat > "$HOME/.local/bin/${APP}-web" <<EOF
+#!/usr/bin/env bash
+cd "$HERE"
+exec "$HERE/.venv/bin/python" "$HERE/web/app.py" "\$@"
+EOF
+chmod +x "$HOME/.local/bin/$APP" "$HOME/.local/bin/${APP}-tui" "$HOME/.local/bin/${APP}-web"
 
 # 4. icon + menu entry
 mkdir -p "$HOME/.local/share/icons" "$HOME/.local/share/applications"
@@ -72,6 +77,7 @@ echo "[✓] Installed $NAME"
 echo "    • App menu:  search for \"$NAME\""
 echo "    • Terminal:  $APP        (Qt GUI)"
 echo "                 ${APP}-tui  (terminal UI)"
+echo "                 ${APP}-web  (browser UI at localhost:5000)"
 echo "    • Update:    in-app  Help → Check for Updates"
 if ! printf '%s' "$PATH" | grep -q "$HOME/.local/bin"; then
   echo

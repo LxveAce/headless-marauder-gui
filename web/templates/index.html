@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Headless Marauder v{{ version }}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+:root {
+  --bg: #0b0f0a;
+  --bg2: #05080a;
+  --fg: #c8f7c5;
+  --accent: #39ff14;
+  --danger: #ff4d4d;
+  --muted: #4a6a4a;
+  --border: #1a2e1a;
+  --hover: #112211;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--fg); font-family:'Consolas','Fira Code','Courier New',monospace; font-size:13px; height:100vh; display:flex; flex-direction:column; }
+a { color:var(--accent); }
+
+/* ── toolbar ── */
+#toolbar { display:flex; align-items:center; gap:8px; padding:6px 12px; background:var(--bg2); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+#toolbar select, #toolbar input, #toolbar button { font-family:inherit; font-size:12px; background:var(--bg); color:var(--fg); border:1px solid var(--border); padding:4px 8px; border-radius:3px; }
+#toolbar button { cursor:pointer; }
+#toolbar button:hover { background:var(--hover); border-color:var(--accent); }
+#toolbar .spacer { flex:1; }
+#status-dot { width:10px; height:10px; border-radius:50%; background:#555; display:inline-block; }
+#status-dot.on { background:var(--accent); box-shadow:0 0 6px var(--accent); }
+#btn-stop { background:#2a0a0a; color:var(--danger); border-color:var(--danger); font-weight:bold; }
+#btn-stop:hover { background:#3a1515; }
+
+/* ── layout ── */
+#main { display:flex; flex:1; overflow:hidden; }
+#sidebar { width:240px; min-width:200px; overflow-y:auto; border-right:1px solid var(--border); background:var(--bg2); padding:4px; }
+#content { flex:1; display:flex; flex-direction:column; }
+
+/* ── tabs ── */
+#tabs { display:flex; border-bottom:1px solid var(--border); background:var(--bg2); }
+.tab { padding:6px 16px; cursor:pointer; border-bottom:2px solid transparent; color:var(--muted); }
+.tab:hover { color:var(--fg); }
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* ── tab panes ── */
+.pane { flex:1; display:none; overflow:auto; }
+.pane.active { display:flex; flex-direction:column; }
+
+/* ── console ── */
+#console { flex:1; padding:8px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; background:var(--bg2); font-size:12px; line-height:1.5; }
+#console .cmd { color:var(--accent); }
+#console .err { color:var(--danger); }
+
+/* ── raw input ── */
+#input-bar { display:flex; border-top:1px solid var(--border); background:var(--bg2); }
+#raw-input { flex:1; background:var(--bg); color:var(--fg); border:none; padding:8px 12px; font-family:inherit; font-size:13px; outline:none; }
+#btn-send { background:var(--bg); color:var(--accent); border:none; border-left:1px solid var(--border); padding:8px 16px; cursor:pointer; font-family:inherit; }
+#btn-send:hover { background:var(--hover); }
+
+/* ── tables ── */
+table.data { width:100%; border-collapse:collapse; }
+table.data th { background:var(--bg); color:var(--accent); text-align:left; padding:6px 10px; border-bottom:1px solid var(--border); position:sticky; top:0; font-weight:normal; font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+table.data td { padding:5px 10px; border-bottom:1px solid var(--border); font-size:12px; }
+table.data tr:hover { background:var(--hover); }
+table.data td.rssi { font-weight:bold; }
+
+/* ── sidebar commands ── */
+.cat-label { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); padding:8px 8px 4px; margin-top:4px; }
+.cmd-btn { display:block; width:100%; text-align:left; padding:5px 8px; margin:1px 0; background:transparent; color:var(--fg); border:1px solid transparent; border-radius:3px; cursor:pointer; font-family:inherit; font-size:12px; }
+.cmd-btn:hover { background:var(--hover); border-color:var(--border); }
+.cmd-btn.danger { color:var(--danger); }
+.cmd-btn.danger:hover { border-color:var(--danger); }
+
+/* ── modal ── */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center; }
+.modal-overlay.show { display:flex; }
+.modal { background:var(--bg); border:1px solid var(--accent); border-radius:6px; padding:20px; min-width:340px; max-width:500px; max-height:80vh; overflow-y:auto; }
+.modal h3 { color:var(--accent); margin-bottom:12px; font-size:14px; }
+.modal label { display:block; color:var(--muted); font-size:11px; margin:8px 0 3px; }
+.modal input, .modal select { width:100%; background:var(--bg2); color:var(--fg); border:1px solid var(--border); padding:6px 8px; border-radius:3px; font-family:inherit; font-size:12px; }
+.modal-actions { display:flex; gap:8px; margin-top:16px; justify-content:flex-end; }
+.modal-actions button { padding:6px 16px; border-radius:3px; cursor:pointer; font-family:inherit; border:1px solid var(--border); background:var(--bg2); color:var(--fg); }
+.modal-actions button.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:bold; }
+.modal-actions button.primary:hover { opacity:0.9; }
+.modal-actions button:hover { border-color:var(--accent); }
+
+/* ── scrollbar ── */
+::-webkit-scrollbar { width:8px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ── TOOLBAR ── -->
+<div id="toolbar">
+  <span id="status-dot"></span>
+  <select id="port-select"><option value="">Select port...</option></select>
+  <button id="btn-refresh" title="Refresh ports">&#x21bb;</button>
+  <button id="btn-connect">Connect</button>
+  <label style="color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px;">
+    <input type="checkbox" id="chk-autolist" checked> Auto-list
+  </label>
+  <label style="color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px;">
+    <input type="checkbox" id="chk-log"> Log
+  </label>
+  <span class="spacer"></span>
+  <button id="btn-clear" title="Clear console">Clear</button>
+  <button id="btn-stop">STOP</button>
+</div>
+
+<!-- ── MAIN ── -->
+<div id="main">
+  <!-- sidebar -->
+  <div id="sidebar"></div>
+
+  <!-- content -->
+  <div id="content">
+    <div id="tabs">
+      <div class="tab active" data-tab="console">Console</div>
+      <div class="tab" data-tab="aps">Access Points</div>
+      <div class="tab" data-tab="stations">Stations</div>
+    </div>
+
+    <!-- console pane -->
+    <div class="pane active" id="pane-console">
+      <div id="console"></div>
+      <div id="input-bar">
+        <input id="raw-input" placeholder="Type a command..." autocomplete="off">
+        <button id="btn-send">Send</button>
+      </div>
+    </div>
+
+    <!-- AP table pane -->
+    <div class="pane" id="pane-aps">
+      <table class="data">
+        <thead><tr><th>#</th><th>SSID</th><th>Ch</th><th>RSSI</th><th>BSSID</th></tr></thead>
+        <tbody id="ap-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Station table pane -->
+    <div class="pane" id="pane-stations">
+      <table class="data">
+        <thead><tr><th>#</th><th>MAC</th><th>AP BSSID</th><th>RSSI</th></tr></thead>
+        <tbody id="sta-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── PARAM MODAL ── -->
+<div class="modal-overlay" id="param-modal">
+  <div class="modal">
+    <h3 id="modal-title"></h3>
+    <p id="modal-desc" style="color:var(--muted);font-size:12px;margin-bottom:8px;"></p>
+    <div id="modal-fields"></div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="primary" id="modal-run">Run</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+let cmdCatalog = [];
+let currentCmd = null;
+const MAX_CONSOLE = 2000;
+
+// ── socket events ──────────────────────────────────────────────────────── //
+
+socket.on("serial", (d) => {
+  const con = document.getElementById("console");
+  const div = document.createElement("div");
+  const line = d.line || "";
+  if (line.startsWith(">>")) div.className = "cmd";
+  else if (line.includes("[error]") || line.includes("[serial error]")) div.className = "err";
+  div.textContent = line;
+  con.appendChild(div);
+  while (con.children.length > MAX_CONSOLE) con.removeChild(con.firstChild);
+  con.scrollTop = con.scrollHeight;
+});
+
+socket.on("status", (d) => {
+  const dot = document.getElementById("status-dot");
+  const btn = document.getElementById("btn-connect");
+  if (d.connected) {
+    dot.classList.add("on");
+    btn.textContent = "Disconnect";
+    btn.dataset.state = "on";
+  } else {
+    dot.classList.remove("on");
+    btn.textContent = "Connect";
+    btn.dataset.state = "off";
+    if (d.error) appendConsole("[error] " + d.error, "err");
+  }
+});
+
+socket.on("tables", (d) => {
+  renderTable("ap-tbody", d.aps, ["index","ssid","channel","rssi","bssid"]);
+  renderTable("sta-tbody", d.stations, ["index","mac","ap_bssid","rssi"]);
+  document.querySelector('[data-tab="aps"]').textContent = `Access Points (${d.aps.length})`;
+  document.querySelector('[data-tab="stations"]').textContent = `Stations (${d.stations.length})`;
+});
+
+socket.on("log_status", (d) => {
+  if (d.enabled) appendConsole("[log] Recording to " + d.path, "cmd");
+  else appendConsole("[log] Stopped", "cmd");
+});
+
+// ── helpers ────────────────────────────────────────────────────────────── //
+
+function appendConsole(text, cls) {
+  const con = document.getElementById("console");
+  const div = document.createElement("div");
+  if (cls) div.className = cls;
+  div.textContent = text;
+  con.appendChild(div);
+  con.scrollTop = con.scrollHeight;
+}
+
+function esc(v) {
+  if (v === undefined || v === null || v === -1) return "";
+  const d = document.createElement("span");
+  d.textContent = String(v);
+  return d.innerHTML;
+}
+
+function renderTable(tbodyId, rows, fields) {
+  const tbody = document.getElementById(tbodyId);
+  let html = "";
+  for (const r of rows) {
+    html += "<tr>";
+    for (const f of fields) {
+      const cls = f === "rssi" ? ' class="rssi"' : "";
+      html += `<td${cls}>${esc(r[f])}</td>`;
+    }
+    html += "</tr>";
+  }
+  tbody.innerHTML = html;
+}
+
+// ── toolbar ────────────────────────────────────────────────────────────── //
+
+function refreshPorts() {
+  fetch("/api/ports").then(r => r.json()).then(ports => {
+    const sel = document.getElementById("port-select");
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Auto-detect</option>';
+    for (const p of ports) {
+      const opt = document.createElement("option");
+      opt.value = p.device;
+      opt.textContent = `${p.device} — ${p.description}`;
+      sel.appendChild(opt);
+    }
+    if (cur) sel.value = cur;
+  });
+}
+
+document.getElementById("btn-refresh").onclick = refreshPorts;
+
+document.getElementById("btn-connect").onclick = () => {
+  const btn = document.getElementById("btn-connect");
+  if (btn.dataset.state === "on") {
+    socket.emit("disconnect_serial");
+  } else {
+    const port = document.getElementById("port-select").value || null;
+    socket.emit("connect_serial", {port});
+  }
+};
+
+document.getElementById("btn-stop").onclick = () => {
+  socket.emit("stop");
+  document.getElementById("chk-autolist").checked = false;
+  socket.emit("autolist", {enabled: false});
+};
+
+document.getElementById("btn-clear").onclick = () => {
+  document.getElementById("console").innerHTML = "";
+};
+
+document.getElementById("chk-autolist").onchange = (e) => {
+  socket.emit("autolist", {enabled: e.target.checked});
+};
+
+document.getElementById("chk-log").onchange = (e) => {
+  socket.emit("toggle_log", {enabled: e.target.checked});
+};
+
+// ── raw input ──────────────────────────────────────────────────────────── //
+
+const rawInput = document.getElementById("raw-input");
+const cmdHistory = [];
+let histIdx = -1;
+
+rawInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const val = rawInput.value.trim();
+    if (val) {
+      socket.emit("send_command", {raw: val});
+      cmdHistory.unshift(val);
+      if (cmdHistory.length > 100) cmdHistory.pop();
+      histIdx = -1;
+      rawInput.value = "";
+    }
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (histIdx < cmdHistory.length - 1) { histIdx++; rawInput.value = cmdHistory[histIdx]; }
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (histIdx > 0) { histIdx--; rawInput.value = cmdHistory[histIdx]; }
+    else { histIdx = -1; rawInput.value = ""; }
+  }
+});
+document.getElementById("btn-send").onclick = () => {
+  rawInput.dispatchEvent(new KeyboardEvent("keydown", {key:"Enter"}));
+};
+
+// ── tabs ───────────────────────────────────────────────────────────────── //
+
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".pane").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("pane-" + tab.dataset.tab).classList.add("active");
+    if (tab.dataset.tab !== "console") socket.emit("get_tables");
+  };
+});
+
+// ── sidebar ────────────────────────────────────────────────────────────── //
+
+function buildSidebar(catalog) {
+  const sb = document.getElementById("sidebar");
+  sb.innerHTML = "";
+  for (const group of catalog) {
+    const label = document.createElement("div");
+    label.className = "cat-label";
+    label.textContent = group.category;
+    sb.appendChild(label);
+    for (const cmd of group.commands) {
+      const btn = document.createElement("button");
+      btn.className = "cmd-btn" + (cmd.danger ? " danger" : "");
+      btn.textContent = cmd.label;
+      btn.title = cmd.desc + (cmd.longrunning ? " (long-running — use STOP)" : "") + (cmd.danger ? " [DANGER]" : "");
+      btn.onclick = () => runCmd(cmd);
+      sb.appendChild(btn);
+    }
+  }
+}
+
+function runCmd(cmd) {
+  if (cmd.params && cmd.params.length > 0) {
+    openModal(cmd);
+  } else {
+    if (cmd.danger && !confirm(`Run "${cmd.label}"? This is a potentially disruptive action.`)) return;
+    socket.emit("send_command", {cmd_id: cmd.id, values: {}});
+    if (cmd.longrunning && document.getElementById("chk-autolist").checked) {
+      socket.emit("autolist", {enabled: true});
+    }
+  }
+}
+
+// ── param modal ────────────────────────────────────────────────────────── //
+
+function openModal(cmd) {
+  currentCmd = cmd;
+  document.getElementById("modal-title").textContent = cmd.label;
+  document.getElementById("modal-desc").textContent = cmd.desc;
+  const fields = document.getElementById("modal-fields");
+  fields.innerHTML = "";
+  for (const p of cmd.params) {
+    const lbl = document.createElement("label");
+    lbl.textContent = p.name + (p.required ? " *" : "") + (p.help ? ` — ${p.help}` : "");
+    fields.appendChild(lbl);
+
+    let input;
+    if (p.kind === "select") {
+      input = document.createElement("select");
+      if (!p.required) { const o = document.createElement("option"); o.value = ""; o.textContent = "(none)"; input.appendChild(o); }
+      for (const c of (p.choices || [])) { const o = document.createElement("option"); o.value = c; o.textContent = c; input.appendChild(o); }
+    } else if (p.kind === "bool") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+      input.style.width = "auto";
+    } else {
+      input = document.createElement("input");
+      input.type = p.kind === "int" ? "number" : "text";
+      input.placeholder = p.placeholder || "";
+    }
+    input.dataset.param = p.name;
+    input.dataset.kind = p.kind;
+    fields.appendChild(input);
+  }
+  document.getElementById("param-modal").classList.add("show");
+}
+
+function closeModal() {
+  document.getElementById("param-modal").classList.remove("show");
+  currentCmd = null;
+}
+
+document.getElementById("modal-run").onclick = () => {
+  if (!currentCmd) return;
+  const values = {};
+  document.querySelectorAll("#modal-fields [data-param]").forEach(el => {
+    const name = el.dataset.param;
+    if (el.dataset.kind === "bool") values[name] = el.checked;
+    else if (el.dataset.kind === "int") values[name] = el.value ? parseInt(el.value) : null;
+    else values[name] = el.value;
+  });
+  if (currentCmd.danger && !confirm(`Run "${currentCmd.label}"? This is a potentially disruptive action.`)) return;
+  socket.emit("send_command", {cmd_id: currentCmd.id, values});
+  if (currentCmd.longrunning && document.getElementById("chk-autolist").checked) {
+    socket.emit("autolist", {enabled: true});
+  }
+  closeModal();
+};
+
+document.getElementById("param-modal").onclick = (e) => {
+  if (e.target.id === "param-modal") closeModal();
+};
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
+
+// ── keyboard shortcuts ─────────────────────────────────────────────────── //
+
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.key === "l") { e.preventDefault(); document.getElementById("btn-clear").click(); return; }
+  if (e.ctrlKey && e.key === ".") { e.preventDefault(); document.getElementById("btn-stop").click(); return; }
+  if (e.ctrlKey && e.key === "k") { e.preventDefault(); rawInput.focus(); return; }
+});
+
+// ── init ───────────────────────────────────────────────────────────────── //
+
+refreshPorts();
+fetch("/api/commands").then(r => r.json()).then(catalog => {
+  cmdCatalog = catalog;
+  buildSidebar(catalog);
+});
+fetch("/api/status").then(r => r.json()).then(s => {
+  if (s.connected) {
+    document.getElementById("status-dot").classList.add("on");
+    document.getElementById("btn-connect").textContent = "Disconnect";
+    document.getElementById("btn-connect").dataset.state = "on";
+  }
+});
+</script>
+</body>
+</html>
