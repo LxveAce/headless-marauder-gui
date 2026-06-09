@@ -280,6 +280,167 @@ class FlashScreen(ModalScreen):
         self.dismiss()
 
 
+class SuicideFlashScreen(ModalScreen):
+    """Modal suicide-build provisioner and flasher."""
+
+    CSS = """
+    #suicide { width: 90%; height: 92%; border: round $accent; background: $surface; padding: 1; }
+    #slog { height: 1fr; border: round $accent; }
+    #suicide Button { margin: 0 1; }
+    """
+    BINDINGS = [("escape", "close", "Close")]
+
+    def __init__(self, controller: MarauderController):
+        super().__init__()
+        self.ctl = controller
+        self.chip = None
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="suicide"):
+            yield Label("Suicide Build — Provision & Flash")
+            yield Input(value=(self.ctl.port or ""), placeholder="port e.g. /dev/ttyUSB0", id="sport")
+            yield Select(
+                [("Provision new bundle", "new"), ("Flash existing bundle", "existing")],
+                value="new", id="smode",
+            )
+            yield Static("— Provision settings —")
+            yield Input(placeholder="Boot password", password=True, id="spw")
+            yield Input(placeholder="Confirm password", password=True, id="spw2")
+            yield Select(
+                [("fork", "fork"), ("guardian", "guardian")],
+                value="fork", id="svariant",
+            )
+            yield Input(value="27", placeholder="Arm GPIO pin (0-48)", id="sarm")
+            yield Input(value="2", placeholder="Max fail attempts (1-10)", id="smaxatt")
+            yield Select([("Yes", 1), ("No", 0)], value=1, id="sdeadman")
+            yield Static("Dead-man switch ↑  ·  Armed ↓")
+            yield Select([("No — safe mode", 0), ("Yes — ARMED", 1)], value=0, id="sarmed")
+            yield Input(placeholder="Build dir (compiled firmware, optional)", id="sbuilddir")
+            yield Static("— Existing bundle —")
+            yield Input(placeholder="Bundle directory path", id="sbundle")
+            yield Static("chip: ?", id="schiplbl")
+            with Horizontal():
+                yield Button("Detect chip", id="sdetect")
+                yield Button("Flash", id="sflash", variant="warning")
+                yield Button("Close", id="sclose")
+            yield RichLog(id="slog", highlight=False, markup=False, wrap=True)
+
+    def on_mount(self):
+        if not flasher.esptool_available():
+            self._log("[!] esptool not found — pip install esptool")
+
+    def _log(self, s):
+        self.query_one("#slog", RichLog).write(s)
+
+    def _line(self):
+        return lambda s: self.app.call_from_thread(self._log, s)
+
+    def _port(self):
+        return self.query_one("#sport", Input).value.strip()
+
+    def _free(self, on=None):
+        if self.ctl.connected:
+            if on:
+                on("[i] closing serial session for esptool")
+            self.ctl.disconnect()
+
+    def on_button_pressed(self, event: Button.Pressed):
+        bid = event.button.id
+        if bid == "sclose":
+            self.dismiss(); return
+        port = self._port()
+        if bid == "sdetect":
+            self.run_worker(lambda: self._detect(port), thread=True); return
+        if bid == "sflash":
+            mode = self.query_one("#smode", Select).value
+            if mode == "existing":
+                bundle = self.query_one("#sbundle", Input).value.strip()
+                self.run_worker(lambda: self._flash_existing(port, bundle), thread=True)
+            else:
+                pw = self.query_one("#spw", Input).value
+                pw2 = self.query_one("#spw2", Input).value
+                variant = self.query_one("#svariant", Select).value
+                arm_pin = self.query_one("#sarm", Input).value.strip()
+                max_att = self.query_one("#smaxatt", Input).value.strip()
+                deadman = self.query_one("#sdeadman", Select).value
+                armed = self.query_one("#sarmed", Select).value
+                build_dir = self.query_one("#sbuilddir", Input).value.strip() or None
+                self.query_one("#spw", Input).value = ""
+                self.query_one("#spw2", Input).value = ""
+                self.run_worker(
+                    lambda: self._flash_new(port, pw, pw2, variant, arm_pin, max_att, deadman, armed, build_dir),
+                    thread=True,
+                )
+
+    def _detect(self, port):
+        on = self._line()
+        try:
+            self._free(on)
+            self.chip = flasher.detect_chip(port, on)
+            self.app.call_from_thread(
+                lambda: self.query_one("#schiplbl", Static).update(f"chip: {self.chip or 'unknown'}")
+            )
+        except Exception as e:
+            on(f"[error] {e}")
+
+    def _resolve_chip(self, port, on):
+        if self.chip:
+            return self.chip
+        on("[*] detecting chip...")
+        self.chip = flasher.detect_chip(port, on)
+        return self.chip
+
+    def _flash_existing(self, port, bundle_dir):
+        on = self._line()
+        try:
+            if not bundle_dir:
+                on("[error] enter a bundle directory path"); return
+            manifest = flasher.read_bundle_manifest(bundle_dir)
+            man_chip = manifest.get("chip")
+            self._free(on)
+            chip = man_chip or self._resolve_chip(port, on)
+            if not chip:
+                on("[error] chip unknown"); return
+            on(f"[*] flashing suicide bundle from {bundle_dir} ...")
+            rc = flasher.flash_suicide(port, chip, bundle_dir, on, baud=921600)
+            on("[done] power-cycle the board" if rc == 0 else f"[x] esptool exit {rc}")
+        except Exception as e:
+            on(f"[error] {e}")
+
+    def _flash_new(self, port, pw, pw2, variant, arm_pin, max_att, deadman, armed, build_dir):
+        on = self._line()
+        try:
+            if not pw:
+                on("[error] enter a boot password"); return
+            if pw != pw2:
+                on("[error] passwords don't match"); return
+            try:
+                arm_pin = int(arm_pin)
+                max_att = int(max_att)
+            except ValueError:
+                on("[error] arm pin and max attempts must be numbers"); return
+            self._free(on)
+            chip = self._resolve_chip(port, on)
+            if not chip:
+                on("[error] chip unknown"); return
+            import suicide
+            on("[*] provisioning suicide bundle...")
+            bundle_path = suicide.build_bundle(
+                password=pw, chip=chip, variant=variant,
+                arm_pin=arm_pin, max_att=max_att,
+                deadman=int(deadman), armed=int(armed),
+                build_dir=build_dir, on_line=on,
+            )
+            on(f"[*] flashing bundle from {bundle_path} ...")
+            rc = flasher.flash_suicide(port, chip, bundle_path, on, baud=921600)
+            on("[done] power-cycle the board" if rc == 0 else f"[x] esptool exit {rc}")
+        except Exception as e:
+            on(f"[error] {e}")
+
+    def action_close(self):
+        self.dismiss()
+
+
 class MarauderTUI(App):
     CSS = """
     Screen { layout: vertical; }
@@ -295,6 +456,7 @@ class MarauderTUI(App):
         ("q", "quit", "Quit"),
         ("s", "stop", "Stop scan"),
         ("f", "flash", "Flash fw"),
+        ("x", "suicide", "Suicide flash"),
         ("g", "guide", "Guide"),
         ("ctrl+l", "clear", "Clear log"),
         ("c", "focus_input", "Command box"),
@@ -451,6 +613,9 @@ class MarauderTUI(App):
 
     def action_flash(self):
         self.push_screen(FlashScreen(self.ctl))
+
+    def action_suicide(self):
+        self.push_screen(SuicideFlashScreen(self.ctl))
 
     def action_guide(self):
         self.push_screen(GuideScreen())

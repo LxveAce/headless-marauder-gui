@@ -8,3 +8,4 @@ textual>=0.50       # terminal UI (tui/app.py only)
 esptool>=4.7,<6     # firmware flashing — pinned <6: v6 removes the chip_id/write_flash/--flash_size aliases this app uses
 flask>=3.0          # browser UI backend (web/app.py)
 flask-socketio>=5.3 # real-time WebSocket push for browser UI
+esp-idf-nvs-partition-gen==0.2.0  # NVS image generator for suicide-build provisioner (not bundled with esptool)

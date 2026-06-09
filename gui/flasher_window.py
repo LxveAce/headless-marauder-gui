@@ -155,40 +155,73 @@ class FlasherWindow(tk.Toplevel):
         Tooltip(browse_btn, "Pick an application .bin from disk; selecting one also "
                 "switches the source to 'Local .bin'.")
 
-        # --- opt-in: Suicide build (flash a pre-provisioned hardened bundle) ---
-        # Plain flashing above stays the default; this only engages when ticked.
-        # The whole row is shown only for profiles whose .supports_suicide is True
-        # (the Marauder profile); _apply_profile_suicide_visibility() toggles it.
+        # --- opt-in: Suicide build (provision + flash anti-forensic bundle) ---
         self.suicide_row = tk.Frame(self, bg=PANEL); self.suicide_row.pack(fill="x", **pad)
         self.suicide = tk.BooleanVar(value=False)
-        suicide_cb = ttk.Checkbutton(self.suicide_row, text="Suicide build (flash provisioned bundle)",
+        suicide_cb = ttk.Checkbutton(self.suicide_row, text="Suicide build (provision + flash)",
                                      variable=self.suicide, command=self._toggle_suicide)
         suicide_cb.pack(side="left")
-        Tooltip(suicide_cb, GLOSSARY["suicide build"] + "\n\nWhen ticked, FLASH writes the "
-                "bundle folder's manifest files instead of the firmware selected above. "
-                "This app only flashes a bundle — it never burns eFuses.")
+        Tooltip(suicide_cb, "Owner-only hardened build that can self-wipe. "
+                "Enter a password and config, or point at an existing bundle.")
 
-        # bundle row — hidden until the suicide checkbox is ticked
-        self.bundle_row = tk.Frame(self, bg=PANEL)
-        tk.Label(self.bundle_row, text="Bundle:", bg=PANEL, fg=FG).pack(side="left")
+        # suicide sub-panel — hidden until checkbox ticked
+        self.suicide_panel = tk.Frame(self, bg=PANEL)
+
+        # mode selector
+        self.suicide_mode = tk.StringVar(value="new")
+        smrow = tk.Frame(self.suicide_panel, bg=PANEL)
+        smrow.pack(fill="x", padx=4, pady=2)
+        ttk.Radiobutton(smrow, text="Provision new", variable=self.suicide_mode,
+                         value="new", command=self._toggle_suicide_mode).pack(side="left")
+        ttk.Radiobutton(smrow, text="Flash existing bundle", variable=self.suicide_mode,
+                         value="existing", command=self._toggle_suicide_mode).pack(side="left", padx=8)
+
+        # provision-new sub-panel
+        self.provision_frame = tk.Frame(self.suicide_panel, bg=PANEL)
+        self.provision_frame.pack(fill="x", padx=4)
+        prow1 = tk.Frame(self.provision_frame, bg=PANEL); prow1.pack(fill="x", pady=1)
+        tk.Label(prow1, text="Password:", bg=PANEL, fg=FG, width=12, anchor="e").pack(side="left")
+        self.s_pw_var = tk.StringVar()
+        pw_ent = ttk.Entry(prow1, textvariable=self.s_pw_var, show="*", width=30)
+        pw_ent.pack(side="left", padx=4)
+        Tooltip(pw_ent, "Boot password — hashed locally, never stored or logged.")
+        prow2 = tk.Frame(self.provision_frame, bg=PANEL); prow2.pack(fill="x", pady=1)
+        tk.Label(prow2, text="Confirm:", bg=PANEL, fg=FG, width=12, anchor="e").pack(side="left")
+        self.s_pw2_var = tk.StringVar()
+        pw2_ent = ttk.Entry(prow2, textvariable=self.s_pw2_var, show="*", width=30)
+        pw2_ent.pack(side="left", padx=4)
+        prow3 = tk.Frame(self.provision_frame, bg=PANEL); prow3.pack(fill="x", pady=1)
+        tk.Label(prow3, text="Variant:", bg=PANEL, fg=FG, width=12, anchor="e").pack(side="left")
+        self.s_variant_var = tk.StringVar(value="fork")
+        ttk.Combobox(prow3, textvariable=self.s_variant_var, values=["fork", "guardian"],
+                      state="readonly", width=12).pack(side="left", padx=4)
+        tk.Label(prow3, text="Arm GPIO:", bg=PANEL, fg=FG).pack(side="left", padx=(12, 0))
+        self.s_arm_pin_var = tk.IntVar(value=27)
+        ttk.Spinbox(prow3, textvariable=self.s_arm_pin_var, from_=0, to=48, width=4).pack(side="left", padx=4)
+        tk.Label(prow3, text="Max att:", bg=PANEL, fg=FG).pack(side="left", padx=(12, 0))
+        self.s_max_att_var = tk.IntVar(value=2)
+        ttk.Spinbox(prow3, textvariable=self.s_max_att_var, from_=1, to=10, width=4).pack(side="left", padx=4)
+        prow4 = tk.Frame(self.provision_frame, bg=PANEL); prow4.pack(fill="x", pady=1)
+        self.s_deadman_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(prow4, text="Dead-man switch", variable=self.s_deadman_var).pack(side="left")
+        self.s_armed_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(prow4, text="ARM now (default OFF)", variable=self.s_armed_var).pack(side="left", padx=12)
+        prow5 = tk.Frame(self.provision_frame, bg=PANEL); prow5.pack(fill="x", pady=1)
+        tk.Label(prow5, text="Build dir:", bg=PANEL, fg=FG, width=12, anchor="e").pack(side="left")
+        self.s_build_dir_var = tk.StringVar()
+        ttk.Entry(prow5, textvariable=self.s_build_dir_var, width=30).pack(side="left", padx=4)
+        ttk.Button(prow5, text="Browse", command=lambda: self._browse_dir(self.s_build_dir_var)).pack(side="left")
+
+        # existing-bundle sub-panel
+        self.existing_frame = tk.Frame(self.suicide_panel, bg=PANEL)
+        tk.Label(self.existing_frame, text="Bundle:", bg=PANEL, fg=FG).pack(side="left")
         self.bundle_var = tk.StringVar()
-        bundle_ent = ttk.Entry(self.bundle_row, textvariable=self.bundle_var, width=48)
-        bundle_ent.pack(side="left", padx=6)
-        Tooltip(bundle_ent, GLOSSARY["bundle"])
-        bundle_browse = ttk.Button(self.bundle_row, text="Browse folder",
-                                   command=self._browse_bundle)
-        bundle_browse.pack(side="left")
-        Tooltip(bundle_browse, "Pick the bundle folder produced by the Suicide-Marauder "
-                "provisioner (must contain bundle.json plus its .bin images).")
+        ttk.Entry(self.existing_frame, textvariable=self.bundle_var, width=48).pack(side="left", padx=6)
+        ttk.Button(self.existing_frame, text="Browse folder",
+                   command=self._browse_bundle).pack(side="left")
 
-        self.suicide_lbl = tk.Label(
-            self.bundle_row,
-            text="owner-only / authorized device — flashes a prepared bundle; no eFuses burned",
-            bg=PANEL, fg=DANGER, wraplength=300, justify="left")
-        self.suicide_lbl.pack(side="left", padx=8)
-        Tooltip(self.suicide_lbl, "Defensive, owner-only feature: provisioning (passwords, "
-                "eFuses, T2) happens in the Suicide-Marauder repo. Only flash bundles for "
-                "devices you own and are authorized to wipe.")
+        tk.Label(self.suicide_panel, text="⚠ SAFETY: test in SAFE_MODE first. Read suicide/docs/SAFETY.md.",
+                 bg=PANEL, fg=DANGER, wraplength=500, justify="left").pack(fill="x", padx=4, pady=2)
 
         # baud + actions
         arow = tk.Frame(self, bg=PANEL); arow.pack(fill="x", **pad)
@@ -346,12 +379,24 @@ class FlasherWindow(tk.Toplevel):
             self.source.set("local")
 
     def _toggle_suicide(self):
-        """Reveal/hide the bundle-dir row when the opt-in suicide checkbox flips."""
         if self.suicide.get():
-            # show it right under the checkbox (before the baud/actions row)
-            self.bundle_row.pack(fill="x", padx=8, pady=4, before=self.flash_btn.master)
+            self.suicide_panel.pack(fill="x", padx=8, pady=4, before=self.flash_btn.master)
+            self._toggle_suicide_mode()
         else:
-            self.bundle_row.pack_forget()
+            self.suicide_panel.pack_forget()
+
+    def _toggle_suicide_mode(self):
+        if self.suicide_mode.get() == "new":
+            self.provision_frame.pack(fill="x", padx=4)
+            self.existing_frame.pack_forget()
+        else:
+            self.provision_frame.pack_forget()
+            self.existing_frame.pack(fill="x", padx=4, pady=2)
+
+    def _browse_dir(self, var):
+        path = filedialog.askdirectory(title="Select folder")
+        if path:
+            var.set(path)
 
     def _browse_bundle(self):
         path = filedialog.askdirectory(title="Select provisioned bundle folder")
@@ -430,38 +475,82 @@ class FlasherWindow(tk.Toplevel):
         self._worker(job)
 
     def _flash_suicide(self, port, baud):
-        """Opt-in path: flash a pre-provisioned Suicide-Marauder bundle (no eFuses burned)."""
-        bundle_dir = self.bundle_var.get().strip()
-        if not bundle_dir:
-            messagebox.showinfo("Bundle", "Browse to a provisioned bundle folder first."); return
-        # Validate the manifest up front (on the UI thread) so a bad path/folder is caught
-        # before we drop the live connection or spawn esptool.
-        try:
-            manifest = flasher.read_bundle_manifest(bundle_dir)
-        except (FileNotFoundError, ValueError) as e:
-            messagebox.showerror("Bundle", f"Not a valid bundle:\n{e}"); return
+        """Provision (if new) and flash a suicide bundle."""
+        if self.suicide_mode.get() == "existing":
+            bundle_dir = self.bundle_var.get().strip()
+            if not bundle_dir:
+                messagebox.showinfo("Bundle", "Browse to a provisioned bundle folder first."); return
+            try:
+                manifest = flasher.read_bundle_manifest(bundle_dir)
+            except (FileNotFoundError, ValueError) as e:
+                messagebox.showerror("Bundle", f"Not a valid bundle:\n{e}"); return
+            man_chip = manifest.get("chip")
+            if not messagebox.askyesno(
+                    "Confirm SUICIDE-build flash",
+                    f"Flash provisioned bundle via {port} @ {baud}?\n\n"
+                    f"Folder: {bundle_dir}\n"
+                    f"Bundle chip: {man_chip or 'unspecified'}\n\n"
+                    "This build can self-wipe. Test in SAFE_MODE first.\n"
+                    "Do not unplug during flashing."):
+                return
+            chip = man_chip or self.chip
+            self._free_port()
 
-        man_chip = manifest.get("chip")
-        if not messagebox.askyesno(
-                "Confirm SUICIDE-build flash",
-                f"Flash provisioned bundle via {port} @ {baud}?\n\n"
-                f"Folder: {bundle_dir}\n"
-                f"Bundle chip: {man_chip or 'unspecified'}\n\n"
-                "Owner-only / authorized devices. This writes the bundle's images; it does "
-                "NOT burn eFuses.\nDo not unplug during flashing."):
+            def job():
+                use_chip = chip or self._resolve_chip(port)
+                if not use_chip:
+                    self._log("[error] chip unknown; detect first"); return
+                rc = flasher.flash_suicide(port, use_chip, bundle_dir, self._log, baud=baud)
+                self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
+            self._worker(job)
             return
 
-        # Capture values on the UI thread, then run on a worker (mirrors _flash()).
-        chip = man_chip or self.chip
+        # --- provision new bundle ---
+        pw = self.s_pw_var.get()
+        pw2 = self.s_pw2_var.get()
+        if not pw:
+            messagebox.showwarning("Password", "Enter a boot password."); return
+        if pw != pw2:
+            messagebox.showwarning("Password", "Passwords don't match."); return
+        variant = self.s_variant_var.get()
+        armed = int(self.s_armed_var.get())
+        build_dir = self.s_build_dir_var.get().strip() or None
+
+        msg = (f"Provision + flash suicide build via {port}?\n"
+               f"variant={variant}  armed={armed}  max_att={self.s_max_att_var.get()}\n"
+               "Password is hashed locally, never stored.\n"
+               "Do not unplug during flashing.")
+        if armed:
+            msg += "\n\nWARNING: ARMED=1 — board WILL self-destruct on trigger!"
+        if not messagebox.askyesno("Confirm suicide-build", msg):
+            return
+
+        config = dict(
+            password=pw,
+            variant=variant,
+            arm_pin=self.s_arm_pin_var.get(),
+            arm_level=1,
+            arm_pull=2,
+            deadman=int(self.s_deadman_var.get()),
+            armed=armed,
+            max_att=self.s_max_att_var.get(),
+            build_dir=build_dir,
+        )
+        self.s_pw_var.set("")
+        self.s_pw2_var.set("")
         self._free_port()
 
         def job():
-            use_chip = chip or self._resolve_chip(port)
+            use_chip = self._resolve_chip(port)
             if not use_chip:
-                self._log("[error] chip unknown and not in bundle; detect first or aborting"); return
-            self._log(f"[*] flashing suicide bundle to {use_chip} from {bundle_dir} ...")
-            rc = flasher.flash_suicide(port, use_chip, bundle_dir, self._log, baud=baud)
-            self._log("[✓] done — power-cycle the board" if rc == 0 else f"[x] esptool exit {rc}")
+                self._log("[error] chip unknown"); return
+            try:
+                import suicide
+                bundle_path = suicide.build_bundle(chip=use_chip, on_line=self._log, **config)
+            except Exception as e:
+                self._log(f"[error] provisioning failed: {e}"); return
+            rc = flasher.flash_suicide(port, use_chip, bundle_path, self._log, baud=baud)
+            self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
         self._worker(job)
 
     def _erase(self):
