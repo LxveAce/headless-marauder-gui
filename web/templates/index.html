@@ -84,6 +84,18 @@ table.data td.rssi { font-weight:bold; }
 .modal-actions button.primary:hover { opacity:0.9; }
 .modal-actions button:hover { border-color:var(--accent); }
 
+/* ── flash modal extras ── */
+.flash-row { display:flex; gap:8px; align-items:center; margin-top:2px; }
+.flash-row input[type=text], .flash-row input:not([type]) { flex:1; }
+.flash-row button { width:auto; white-space:nowrap; background:var(--bg2); color:var(--fg); border:1px solid var(--border); padding:6px 10px; border-radius:3px; cursor:pointer; font-family:inherit; font-size:12px; }
+.flash-row button:hover { border-color:var(--accent); }
+.modal label.inline { display:inline-flex; align-items:center; gap:5px; color:var(--fg); width:auto; margin:0; cursor:pointer; }
+.modal label.inline input { width:auto; }
+#flash-erase-btn { color:var(--danger); border-color:var(--danger); }
+#flash-erase-btn:hover { background:#2a0a0a; }
+.flash-danger { color:var(--danger); font-weight:bold; font-size:11px; margin:8px 0; line-height:1.4; }
+.flash-note { color:var(--muted); font-size:11px; margin:6px 0; line-height:1.4; }
+
 /* ── scrollbar ── */
 ::-webkit-scrollbar { width:8px; }
 ::-webkit-scrollbar-track { background:var(--bg); }
@@ -95,19 +107,22 @@ table.data td.rssi { font-weight:bold; }
 
 <!-- ── TOOLBAR ── -->
 <div id="toolbar">
-  <span id="status-dot"></span>
-  <select id="port-select"><option value="">Select port...</option></select>
-  <button id="btn-refresh" title="Refresh ports">&#x21bb;</button>
-  <button id="btn-connect">Connect</button>
-  <label style="color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px;">
-    <input type="checkbox" id="chk-autolist" checked> Auto-list
+  <span id="status-dot" title="Connection status: green when connected to the board."></span>
+  <select id="port-select" title="Serial port the Marauder is on (e.g. COM5 or /dev/ttyUSB0). Pick from the list or leave on auto-detect."><option value="">Select port...</option></select>
+  <button id="btn-refresh" title="Rescan for connected serial ports.">&#x21bb;</button>
+  <button id="btn-connect" title="Open (or close) the serial session to the selected port.">Connect</button>
+  <label style="color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px;"
+         title="While scanning, auto-pull 'list -a' so the AP/Station tables fill themselves.">
+    <input type="checkbox" id="chk-autolist" checked title="While scanning, auto-pull 'list -a' so the tables fill themselves."> Auto-list
   </label>
-  <label style="color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px;">
-    <input type="checkbox" id="chk-log"> Log
+  <label style="color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px;"
+         title="Toggle capture logging: write the serial stream and periodic AP/Station snapshots to the log folder.">
+    <input type="checkbox" id="chk-log" title="Toggle capture logging: write the serial stream + periodic snapshots to the log folder."> Log
   </label>
   <span class="spacer"></span>
-  <button id="btn-clear" title="Clear console">Clear</button>
-  <button id="btn-stop">STOP</button>
+  <button id="btn-flash" title="Open the firmware flasher: download or pick a build (or a Suicide bundle) and write it to the board.">&#x26a1; Flash</button>
+  <button id="btn-clear" title="Clear the console (Ctrl+L).">Clear</button>
+  <button id="btn-stop" title="Send 'stopscan' and halt auto-listing (Ctrl+.). Stops the current attack/scan.">STOP</button>
 </div>
 
 <!-- ── MAIN ── -->
@@ -118,17 +133,18 @@ table.data td.rssi { font-weight:bold; }
   <!-- content -->
   <div id="content">
     <div id="tabs">
-      <div class="tab active" data-tab="console">Console</div>
-      <div class="tab" data-tab="aps">Access Points</div>
-      <div class="tab" data-tab="stations">Stations</div>
+      <div class="tab active" data-tab="console" title="Live serial output from the board (and flasher output).">Console</div>
+      <div class="tab" data-tab="aps" title="Access points parsed from the live scan. # is the index used by 'select -a'.">Access Points</div>
+      <div class="tab" data-tab="stations" title="Client devices (stations) parsed from the scan. # is the index used by 'select -c'.">Stations</div>
     </div>
 
     <!-- console pane -->
     <div class="pane active" id="pane-console">
       <div id="console"></div>
       <div id="input-bar">
-        <input id="raw-input" placeholder="Type a command..." autocomplete="off">
-        <button id="btn-send">Send</button>
+        <input id="raw-input" placeholder="Type a command..." autocomplete="off"
+               title="Type any Marauder command and press Enter to send it (Ctrl+K to focus here; Up/Down for history).">
+        <button id="btn-send" title="Send the typed command to the board.">Send</button>
       </div>
     </div>
 
@@ -159,6 +175,96 @@ table.data td.rssi { font-weight:bold; }
     <div class="modal-actions">
       <button onclick="closeModal()">Cancel</button>
       <button class="primary" id="modal-run">Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FLASH MODAL ── -->
+<div class="modal-overlay" id="flash-modal">
+  <div class="modal" style="min-width:460px;max-width:600px;">
+    <h3>&#x26a1; Flash Firmware</h3>
+
+    <!-- port + detect -->
+    <label>Port</label>
+    <div class="flash-row">
+      <input id="flash-port" placeholder="COM5 or /dev/ttyUSB0" autocomplete="off"
+             title="Serial port of the board to flash (e.g. COM5 or /dev/ttyUSB0). Prefilled from the toolbar; editable.">
+      <button id="flash-detect-btn" title="Talk to the board over USB and read which ESP32 chip it is (esp32, esp32s3, ...). Run once so the right firmware variant is picked.">Detect chip</button>
+      <span id="flash-chip-lbl" style="white-space:nowrap;" title="The detected chip family. Shows '?' until you press Detect chip.">chip: ?</span>
+    </div>
+
+    <!-- firmware profile -->
+    <label>Firmware</label>
+    <select id="flash-profile" title="Which firmware to flash. Defaults to ESP32 Marauder (the normal flow). Switching re-targets the release list / variant picker; the Suicide-build option is Marauder-only."></select>
+
+    <!-- normal-mode rows (hidden when Suicide build is checked) -->
+    <div id="flash-normal">
+      <label>Mode</label>
+      <div class="flash-row" id="flash-mode-row">
+        <label class="inline" title="Write only the application image (re-flash / update an existing board).">
+          <input type="radio" name="flash-mode" value="app" checked> Update app only
+        </label>
+        <label class="inline" title="Flash bootloader + partitions + app to a blank board (downloads support files).">
+          <input type="radio" name="flash-mode" value="full"> Full flash (blank board)
+        </label>
+      </div>
+
+      <label id="flash-source-label">Source</label>
+      <div class="flash-row" id="flash-source-row">
+        <label class="inline" title="Fetch the official firmware for your chip from GitHub releases.">
+          <input type="radio" name="flash-source" value="download" checked> Download latest
+        </label>
+        <label class="inline" title="Flash a firmware .bin file you already have on disk instead of downloading.">
+          <input type="radio" name="flash-source" value="local"> Local .bin
+        </label>
+      </div>
+
+      <div id="flash-dl-row">
+        <label>Variant</label>
+        <div class="flash-row">
+          <button id="flash-load-btn" title="Download the list of available firmware variants from the latest GitHub release.">Load releases</button>
+          <select id="flash-variant" style="flex:1;" title="Pick the firmware build that matches your exact board/display. The best match for the detected chip is preselected."></select>
+        </div>
+      </div>
+
+      <div id="flash-local-row">
+        <label>Local .bin path</label>
+        <input id="flash-local" placeholder="C:\path\to\firmware.bin" autocomplete="off"
+               title="Path to a local firmware .bin to flash (used when 'Local .bin' is selected).">
+      </div>
+    </div>
+
+    <!-- suicide checkbox (only shown for suicide-capable profiles) -->
+    <label class="inline" id="flash-suicide-wrap" style="margin-top:10px;"
+           title="Owner-only hardened build that can self-wipe. Only available for firmware that supports it.">
+      <input type="checkbox" id="flash-suicide" title="Flash a provisioned anti-forensic bundle instead of a normal build. Marauder-only."> Suicide build (flash a provisioned anti-forensic bundle)
+    </label>
+
+    <!-- suicide panel (hidden until the checkbox is ticked) -->
+    <div id="flash-suicide-panel" style="display:none;">
+      <label>Bundle dir</label>
+      <input id="flash-bundle-dir" placeholder="folder containing bundle.json + .bin images" autocomplete="off"
+             title="Folder produced by the Suicide-Marauder provisioner: bundle.json plus its firmware .bin images. This app flashes exactly these files — it does not build them.">
+      <p class="flash-danger" title="This build can erase its own secrets when triggered. Verify behaviour in SAFE_MODE before relying on it. Owner-only, defensive use.">
+        &#x26a0; SAFETY: Flashes a provisioned anti-forensic build (boot password + 2-fail wipe + GPIO dead-man). Build/provision the bundle in the separate Suicide-Marauder repo; test SAFE_MODE first.
+      </p>
+      <p class="flash-note" title="Flash Encryption / Secure Boot is burned into eFuses during provisioning by the Suicide-Marauder repo. This app never burns eFuses.">
+        eFuse / T2 (Flash Encryption + Secure Boot) is an IRREVERSIBLE operation done in the Suicide-Marauder repo, NOT here. This app only flashes an already-provisioned bundle.
+      </p>
+    </div>
+
+    <!-- baud + actions -->
+    <label>Baud</label>
+    <select id="flash-baud" title="Serial transfer speed. Drop to 115200 if a flash stalls.">
+      <option value="115200">115200</option>
+      <option value="460800">460800</option>
+      <option value="921600" selected>921600</option>
+    </select>
+
+    <div class="modal-actions">
+      <button onclick="closeFlashModal()" title="Close the flasher.">Cancel</button>
+      <button id="flash-erase-btn" title="Wipe the board's entire flash. Use before a full flash, or to recover a bad install.">Erase</button>
+      <button class="primary" id="flash-go-btn" title="Write the selected firmware (or Suicide bundle) to the board over USB. Don't unplug while it runs.">&#x26a1; FLASH</button>
     </div>
   </div>
 </div>
@@ -208,6 +314,30 @@ socket.on("tables", (d) => {
 socket.on("log_status", (d) => {
   if (d.enabled) appendConsole("[log] Recording to " + d.path, "cmd");
   else appendConsole("[log] Stopped", "cmd");
+});
+
+// Flasher status: chip detect result, release/variant list, errors, and the done/rc
+// terminator. All server-provided strings rendered via textContent/esc — never innerHTML.
+socket.on("flash_status", (d) => {
+  if (d.error) {
+    appendConsole("[flash error] " + d.error, "err");
+    return;
+  }
+  if (d.chip !== undefined) {
+    const chip = d.chip || "?";
+    setFlashChip(chip === "?" ? "" : chip);
+    appendConsole("[flash] detected chip: " + chip, "cmd");
+  }
+  if (d.tag !== undefined && d.assets !== undefined) {
+    appendConsole(`[flash] ${d.tag}: ${d.assets.length} variant(s)`, "cmd");
+    populateVariants(d.assets);
+  }
+  if (d.done) {
+    appendConsole(d.rc === 0 ? "[flash] done — power-cycle the board"
+                             : "[flash] finished with exit code " + d.rc,
+                  d.rc === 0 ? "cmd" : "err");
+    setFlashBusy(false);
+  }
 });
 
 // ── helpers ────────────────────────────────────────────────────────────── //
@@ -424,7 +554,10 @@ document.getElementById("param-modal").onclick = (e) => {
 };
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
+  if (e.key === "Escape") {
+    closeModal();
+    if (!flashBusy) closeFlashModal();
+  }
 });
 
 // ── keyboard shortcuts ─────────────────────────────────────────────────── //
@@ -435,9 +568,187 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "k") { e.preventDefault(); rawInput.focus(); return; }
 });
 
+// ── flash modal ────────────────────────────────────────────────────────── //
+
+let flashProfiles = [];          // [{id,label,supports_suicide,image_model}]
+let flashVariants = [];          // current loaded asset list: [{name,label,chip}]
+let flashBusy = false;
+
+function currentFlashProfile() {
+  const id = document.getElementById("flash-profile").value;
+  return flashProfiles.find(p => p.id === id) || null;
+}
+
+function setFlashChip(chip) {
+  // chip is server-provided — render via textContent only.
+  document.getElementById("flash-chip-lbl").textContent = "chip: " + (chip || "?");
+}
+
+function setFlashBusy(on) {
+  flashBusy = on;
+  document.getElementById("flash-go-btn").disabled = on;
+  document.getElementById("flash-erase-btn").disabled = on;
+  document.getElementById("flash-detect-btn").disabled = on;
+}
+
+function populateVariants(assets) {
+  flashVariants = assets || [];
+  const sel = document.getElementById("flash-variant");
+  sel.textContent = "";                       // clear (no innerHTML)
+  for (const a of flashVariants) {
+    const opt = document.createElement("option");
+    opt.value = a.name;                        // value used as the lookup key by the backend
+    // Build a human label safely; textContent escapes all server strings.
+    const chip = a.chip ? ` (${a.chip})` : "";
+    opt.textContent = `${a.label || a.name}${chip}  [${a.name}]`;
+    sel.appendChild(opt);
+  }
+}
+
+function applyFlashProfileUi() {
+  const p = currentFlashProfile();
+  const supportsSuicide = !!(p && p.supports_suicide);
+  const isCustom = !!(p && p.id === "custom");
+  const suicideWrap = document.getElementById("flash-suicide-wrap");
+  const suicideBox = document.getElementById("flash-suicide");
+
+  // Suicide checkbox only meaningful for suicide-capable profiles.
+  if (!supportsSuicide && suicideBox.checked) suicideBox.checked = false;
+  suicideWrap.style.display = supportsSuicide ? "inline-flex" : "none";
+  suicideBox.disabled = !supportsSuicide;
+
+  const inSuicide = supportsSuicide && suicideBox.checked;
+  // Normal rows hidden in suicide mode; 'custom' hides the download/release rows.
+  document.getElementById("flash-normal").style.display = inSuicide ? "none" : "block";
+  document.getElementById("flash-suicide-panel").style.display = inSuicide ? "block" : "none";
+  document.getElementById("flash-source-label").style.display = isCustom ? "none" : "block";
+  document.getElementById("flash-source-row").style.display = isCustom ? "none" : "flex";
+  document.getElementById("flash-dl-row").style.display = isCustom ? "none" : "block";
+  if (isCustom) {
+    // custom is local-only — force the local source.
+    document.querySelector('input[name="flash-source"][value="local"]').checked = true;
+  }
+}
+
+function openFlashModal() {
+  // Prefill the port from the toolbar selection (still editable).
+  const tbPort = document.getElementById("port-select").value;
+  if (tbPort) document.getElementById("flash-port").value = tbPort;
+  applyFlashProfileUi();
+  setFlashBusy(false);
+  document.getElementById("flash-modal").classList.add("show");
+}
+
+function closeFlashModal() {
+  document.getElementById("flash-modal").classList.remove("show");
+}
+
+function loadFlashProfiles() {
+  fetch("/api/profiles").then(r => r.json()).then(profiles => {
+    flashProfiles = profiles;
+    const sel = document.getElementById("flash-profile");
+    sel.textContent = "";
+    for (const p of profiles) {
+      const opt = document.createElement("option");
+      opt.value = p.id;                        // id is a known stable token
+      opt.textContent = p.label;               // server label via textContent
+      sel.appendChild(opt);
+    }
+    // default to marauder if present
+    if (profiles.some(p => p.id === "marauder")) sel.value = "marauder";
+    applyFlashProfileUi();
+  });
+}
+
+document.getElementById("btn-flash").onclick = openFlashModal;
+
+document.getElementById("flash-profile").onchange = () => {
+  // Switching firmware invalidates the loaded release/variant list.
+  flashVariants = [];
+  document.getElementById("flash-variant").textContent = "";
+  applyFlashProfileUi();
+};
+
+document.getElementById("flash-suicide").onchange = applyFlashProfileUi;
+
+document.getElementById("flash-detect-btn").onclick = () => {
+  const port = document.getElementById("flash-port").value.trim();
+  if (!port) { appendConsole("[flash error] enter a port first", "err"); return; }
+  socket.emit("flash_detect", {port});
+};
+
+document.getElementById("flash-load-btn").onclick = () => {
+  const profile = document.getElementById("flash-profile").value || "marauder";
+  const chip = flashChipValue();
+  socket.emit("flash_releases", {profile, chip});
+};
+
+function flashChipValue() {
+  // Derive the detected chip from the label ("chip: esp32s3" -> "esp32s3"; "?" -> "").
+  const txt = document.getElementById("flash-chip-lbl").textContent || "";
+  const chip = txt.replace(/^chip:\s*/, "").trim();
+  return (chip && chip !== "?") ? chip : "";
+}
+
+document.getElementById("flash-go-btn").onclick = () => {
+  if (flashBusy) return;
+  const port = document.getElementById("flash-port").value.trim();
+  if (!port) { appendConsole("[flash error] enter a port first", "err"); return; }
+  const profile = currentFlashProfile();
+  const chip = flashChipValue();
+  const baud = parseInt(document.getElementById("flash-baud").value, 10);
+
+  // Suicide-bundle path.
+  if (profile && profile.supports_suicide && document.getElementById("flash-suicide").checked) {
+    const bundleDir = document.getElementById("flash-bundle-dir").value.trim();
+    if (!bundleDir) { appendConsole("[flash error] enter the bundle directory", "err"); return; }
+    if (!confirm(`Flash a SUICIDE / anti-forensic bundle for "${profile.label}" to ${port}?\n\n`
+               + "This is an opt-in self-wipe-capable build. Test in SAFE_MODE first. Don't unplug.")) return;
+    setFlashBusy(true);
+    socket.emit("flash_suicide_run", {port, chip, bundle_dir: bundleDir, baud});
+    return;
+  }
+
+  // Normal flash path.
+  const mode = document.querySelector('input[name="flash-mode"]:checked').value;
+  const source = document.querySelector('input[name="flash-source"]:checked').value;
+  const variant = document.getElementById("flash-variant").value || null;
+  const local = document.getElementById("flash-local").value.trim();
+  const isCustom = profile && profile.id === "custom";
+  const useDownload = source === "download" && !isCustom;
+
+  if (useDownload && !variant) {
+    appendConsole("[flash error] load the release list and pick a variant", "err"); return;
+  }
+  if (!useDownload && !local) {
+    appendConsole("[flash error] enter a local .bin path", "err"); return;
+  }
+  const board = profile ? profile.label : profile;
+  if (!confirm(`Flash ${mode === "full" ? "FULL (blank board)" : "app"} firmware for "${board}" to ${port}?\n\nDon't unplug while it runs.`)) return;
+  setFlashBusy(true);
+  socket.emit("flash_run", {
+    port, chip, profile: profile ? profile.id : "marauder",
+    mode, source: useDownload ? "download" : "local", variant, local, baud,
+  });
+};
+
+document.getElementById("flash-erase-btn").onclick = () => {
+  if (flashBusy) return;
+  const port = document.getElementById("flash-port").value.trim();
+  if (!port) { appendConsole("[flash error] enter a port first", "err"); return; }
+  if (!confirm(`Erase the ENTIRE flash on the board at ${port}? This cannot be undone.`)) return;
+  setFlashBusy(true);
+  socket.emit("flash_erase", {port, chip: flashChipValue()});
+};
+
+document.getElementById("flash-modal").onclick = (e) => {
+  if (e.target.id === "flash-modal" && !flashBusy) closeFlashModal();
+};
+
 // ── init ───────────────────────────────────────────────────────────────── //
 
 refreshPorts();
+loadFlashProfiles();
 fetch("/api/commands").then(r => r.json()).then(catalog => {
   cmdCatalog = catalog;
   buildSidebar(catalog);
