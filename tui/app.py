@@ -3,7 +3,7 @@
 Headless Marauder TUI — a terminal application (Textual) for Kali Linux.
 
 Runs entirely in the terminal: a command tree on the left, live serial output on
-the right, a raw command box at the bottom. Great over SSH / on the deck console.
+the right, a raw command box at the bottom. Great over SSH / on a headless console.
 
 Run:   python3 tui/app.py            (auto-detects the port)
        python3 tui/app.py --port /dev/ttyUSB0
@@ -18,6 +18,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from marauder_core import MarauderController, MarauderParser, CaptureLogger, commands, flasher
+
+try:
+    # Shared, neutral plain-language copy reused for hover help where a term matches.
+    from marauder_core.uihelp import GLOSSARY
+except Exception:                                  # pragma: no cover - defensive
+    GLOSSARY = {}
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -61,6 +67,23 @@ except ImportError:        # older Textual
     from textual.widgets import TextLog as RichLog
 
 
+def _set_tip(widget, text):
+    """Attach hover/help text to a widget without breaking on older Textual.
+
+    Textual exposes a ``tooltip`` property on widgets (>=0.30). We set it
+    defensively: if a given widget or Textual version does not support it,
+    we silently skip — the focus-driven ``#desc`` help line stays as the
+    fallback so the UI is never less helpful, just never broken.
+    """
+    if not text:
+        return widget                  # still safe to yield in compose()
+    try:
+        widget.tooltip = text
+    except Exception:
+        pass
+    return widget
+
+
 class FlashScreen(ModalScreen):
     """Modal firmware flasher: detect chip, fetch firmware, flash."""
 
@@ -82,18 +105,66 @@ class FlashScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="flash"):
             yield Label("Flash Marauder Firmware")
-            yield Input(value=(self.ctl.port or ""), placeholder="port e.g. /dev/ttyUSB0", id="fport")
+            yield _set_tip(
+                Input(value=(self.ctl.port or ""), placeholder="port e.g. /dev/ttyUSB0", id="fport"),
+                "Serial port of the board to flash (e.g. /dev/ttyUSB0 or COM5). "
+                "Defaults to the port this app is connected on.",
+            )
             with Horizontal():
-                yield Button("Detect chip", id="detect")
-                yield Button("Load release", id="load")
-            yield Static("chip: ?", id="chiplbl")
-            yield Select([], prompt="firmware variant", id="variant")
+                yield _set_tip(
+                    Button("Detect chip", id="detect"),
+                    "Probe the board over serial to identify the ESP32 family "
+                    "(esp32 / esp32-s2 / -s3 / -c3). Run this first so the right "
+                    "firmware variant is offered.",
+                )
+                yield _set_tip(
+                    Button("Load release", id="load"),
+                    "Fetch the latest Marauder firmware release and list the "
+                    "available variants for the detected chip.",
+                )
+            yield _set_tip(
+                Static("chip: ?", id="chiplbl"),
+                "The detected ESP32 chip family. Shows '?' until you press "
+                "Detect chip (or it is resolved during a flash).",
+            )
+            yield _set_tip(
+                Select([], prompt="firmware variant", id="variant"),
+                "Pick which firmware image to write. The list is filtered to the "
+                "detected chip after Load release; the recommended default is "
+                "preselected.",
+            )
             with Horizontal():
-                yield Button("Flash app", id="flash_app", variant="success")
-                yield Button("Full flash", id="flash_full", variant="warning")
-                yield Button("Erase", id="erase", variant="error")
-                yield Button("Close", id="close")
-            yield RichLog(id="flog", highlight=False, markup=False, wrap=True)
+                yield _set_tip(
+                    Button("Flash app", id="flash_app", variant="success"),
+                    GLOSSARY.get(
+                        "app-only flash",
+                        "Writes only the application image (offset 0x10000), "
+                        "leaving the existing bootloader and partitions in place. "
+                        "Use to update a board that already runs Marauder.",
+                    ),
+                )
+                yield _set_tip(
+                    Button("Full flash", id="flash_full", variant="warning"),
+                    GLOSSARY.get(
+                        "full flash",
+                        "Writes bootloader, partition table, boot_app0 and the "
+                        "application image. Use for a brand-new or freshly erased chip.",
+                    ),
+                )
+                yield _set_tip(
+                    Button("Erase", id="erase", variant="error"),
+                    "Erase the entire flash on the board. This removes the current "
+                    "firmware and settings — follow with a Full flash to restore.",
+                )
+                yield _set_tip(
+                    Button("Close", id="close"),
+                    "Close this flasher and return to the main TUI (Esc also closes).",
+                )
+            yield _set_tip(
+                RichLog(id="flog", highlight=False, markup=False, wrap=True),
+                "Live output from chip detection, downloads and esptool. "
+                "Read here if a flash fails — the esptool exit code is shown.",
+            )
 
     def on_mount(self):
         if not flasher.esptool_available():
@@ -240,12 +311,33 @@ class MarauderTUI(App):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Horizontal(id="main"):
-            yield Tree("Marauder", id="tree")
+            yield _set_tip(
+                Tree("Marauder", id="tree"),
+                "Browse Marauder commands by category. Highlight a command to see "
+                "what it does in the help line; Enter sends it (or prefills a "
+                "template if it needs arguments). ⚠ marks attack/spam commands.",
+            )
             with Vertical(id="rightcol"):
-                yield RichLog(id="log", highlight=False, markup=False, wrap=True)
-                yield DataTable(id="aptable")
-        yield Static("Select a command to see what it does · press g for the full Guide", id="desc")
-        yield Input(placeholder="raw command (e.g. scanap) — Enter to send", id="raw")
+                yield _set_tip(
+                    RichLog(id="log", highlight=False, markup=False, wrap=True),
+                    "Live serial output from the device. Ctrl+L clears it.",
+                )
+                yield _set_tip(
+                    DataTable(id="aptable"),
+                    "Access points parsed from the live scan output: index, SSID, "
+                    "channel, RSSI (signal) and BSSID (the AP's MAC address). "
+                    "Updates while a scan runs.",
+                )
+        yield _set_tip(
+            Static("Select a command to see what it does · press g for the full Guide", id="desc"),
+            "Help line: shows the highlighted command's description and the exact "
+            "serial string it sends. Press g for the full Guide.",
+        )
+        yield _set_tip(
+            Input(placeholder="raw command (e.g. scanap) — Enter to send", id="raw"),
+            "Type any raw Marauder command and press Enter to send it. Selecting a "
+            "command in the tree prefills this box; fill in any <placeholders> first.",
+        )
         yield Footer()
 
     def on_mount(self):
@@ -310,7 +402,15 @@ class MarauderTUI(App):
                 tip += "  ·  ⚠ attack"
             self.query_one("#desc", Static).update(tip)
         else:
-            self.query_one("#desc", Static).update("press g for the full Guide")
+            # A category node: surface a neutral glossary blurb when its name
+            # matches a known term, otherwise the standard hint. This is the
+            # focus-driven fallback that stands in for per-node tooltips, which
+            # Textual's TreeNode does not support.
+            term = str(event.node.label).strip().lower()
+            blurb = GLOSSARY.get(term)
+            self.query_one("#desc", Static).update(
+                blurb if blurb else "press g for the full Guide"
+            )
 
     def on_tree_node_selected(self, event: Tree.NodeSelected):
         cmd_id = event.node.data
