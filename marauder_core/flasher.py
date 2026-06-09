@@ -14,6 +14,11 @@ Key facts baked in (verified against the v1.12.1 release):
         FlipperZeroDevBoard/        S2 bootloader+partitions
   * Flash offsets: partitions 0x8000, boot_app0 0xE000, app 0x10000 always.
     bootloader 0x1000 on classic ESP32 / S2, but 0x0 on S3 / C-series.
+
+Suicide-bundle note (flash_suicide / read_bundle_manifest): this module only FLASHES a
+bundle that the Suicide-Marauder repo's provisioner already built (bundle.json + .bins). It
+does NOT burn eFuses and does NOT do any T2/secure-boot provisioning or password hashing —
+that all happens in the Suicide-Marauder host provisioner, never here.
 """
 
 import json
@@ -267,6 +272,93 @@ def flash(port: str, chip: str, app_path: str, on_line: Line,
     # --flash_size detect: auto-detect the chip's real flash size and patch the image header.
     # Without it esptool keeps the binary's header value (often 16MB), which boot-loops a 4MB
     # board with "Detected size(4096k) smaller than ... header(16384k). Probe failed."
+    argv = esptool_argv("--chip", chip, "--port", port, "--baud", str(baud),
+                        "--before", "default_reset", "--after", "hard_reset",
+                        "write_flash", "-z", "--flash_size", "detect", *files)
+    return _run_stream(argv, on_line)
+
+
+# --------------------------------------------------------------------------- #
+# suicide bundle (flash a pre-provisioned Suicide-Marauder bundle)
+# --------------------------------------------------------------------------- #
+
+def read_bundle_manifest(bundle_dir: str) -> Dict:
+    """Parse <bundle_dir>/bundle.json and return the manifest dict.
+
+    A bundle is produced by the Suicide-Marauder repo's host/provision.py: it's a directory
+    holding bundle.json plus the .bin images. The manifest must carry a "files" list whose
+    entries each name a file and an offset ("offset_hex" like "0x10000", or an int "offset").
+
+    Raises FileNotFoundError if bundle.json is missing, ValueError if it's malformed.
+    eFuse/T2 provisioning is NOT described or performed here — see the module docstring.
+    """
+    path = os.path.join(bundle_dir, "bundle.json")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"no bundle.json in {bundle_dir} (expected at {path})")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError(f"could not read bundle.json: {e}")
+    if not isinstance(manifest, dict):
+        raise ValueError("bundle.json must contain a JSON object")
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise ValueError('bundle.json is missing a non-empty "files" list')
+    for i, entry in enumerate(files):
+        if not isinstance(entry, dict) or not entry.get("file"):
+            raise ValueError(f'bundle.json "files"[{i}] must be an object with a "file" key')
+        if entry.get("offset_hex") is None and entry.get("offset") is None:
+            raise ValueError(f'bundle.json "files"[{i}] is missing an "offset_hex"/"offset"')
+    return manifest
+
+
+def _bundle_offset(entry: Dict) -> int:
+    """Resolve a manifest file entry's flash offset to an int (offset_hex wins, then offset)."""
+    if entry.get("offset_hex") is not None:
+        return int(str(entry["offset_hex"]), 16)
+    return int(entry["offset"])
+
+
+def flash_suicide(port: str, chip: str, bundle_dir: str, on_line: Line,
+                  baud: int = 921600) -> int:
+    """Flash a pre-provisioned Suicide-Marauder bundle in ONE esptool write_flash.
+
+    Reads bundle.json, validates every listed .bin exists (lists any that don't), warns if the
+    manifest's chip disagrees with `chip`, then writes all offset/path pairs (sorted by offset)
+    in a single `write_flash -z --flash_size detect`. Mirrors flash() for reset/size handling.
+
+    This NEVER burns eFuses and does NO T2/secure-boot provisioning — the Suicide-Marauder host
+    provisioner does that; here we only flash an already-provisioned bundle. Returns the rc.
+    """
+    manifest = read_bundle_manifest(bundle_dir)
+
+    man_chip = manifest.get("chip")
+    if man_chip and man_chip != chip:
+        on_line(f"[WARNING] bundle chip is {man_chip!r} but flashing as {chip!r} "
+                f"— flash will likely fail or brick; double-check the selected chip")
+
+    # Resolve every entry to (offset, absolute path); collect any missing files first so we can
+    # report them all at once instead of failing on the first one.
+    pairs: List[Tuple[int, str]] = []
+    missing: List[str] = []
+    for entry in manifest["files"]:
+        abs_path = os.path.join(bundle_dir, entry["file"])
+        if not os.path.isfile(abs_path):
+            missing.append(entry["file"])
+            continue
+        pairs.append((_bundle_offset(entry), abs_path))
+    if missing:
+        on_line("[error] bundle is missing file(s): " + ", ".join(missing))
+        return 2
+
+    pairs.sort(key=lambda p: p[0])
+    files: List[str] = []
+    for off, path in pairs:
+        files += [f"0x{off:x}", path]
+
+    # --flash_size detect mirrors flash(): patch the image header to the board's real size so a
+    # 4MB board doesn't boot-loop on an image whose header claims 16MB.
     argv = esptool_argv("--chip", chip, "--port", port, "--baud", str(baud),
                         "--before", "default_reset", "--after", "hard_reset",
                         "write_flash", "-z", "--flash_size", "detect", *files)
