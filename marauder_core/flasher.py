@@ -41,6 +41,7 @@ which are ILLEGAL to operate. This module only FLASHES the stock images byte-for
 adds NO jamming functionality and enables nothing — it is plain firmware flashing.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -685,12 +686,66 @@ def flash(port: str, chip: str, app_path: str, on_line: Line,
 # suicide bundle (flash a pre-provisioned Suicide-Marauder bundle)
 # --------------------------------------------------------------------------- #
 
+def _safe_bundle_join(bundle_dir: str, name: str) -> str:
+    """Resolve a manifest file `name` to an absolute path INSIDE `bundle_dir`, or raise.
+
+    Hardening (path-traversal defense): a bundle.json is data that may have been tampered
+    with, so a manifest entry's file name must be a plain basename that lands inside the
+    bundle dir. We reject anything that is not a bare basename, is absolute, carries a
+    drive/UNC prefix, or walks up via "..", and then defensively confirm the realpath stays
+    within the bundle dir (catches symlinks / OS-specific quirks). On any violation we raise
+    ValueError so the caller NEVER hands a bad path to esptool.
+    """
+    if not isinstance(name, str) or not name:
+        raise ValueError("bundle manifest file name must be a non-empty string")
+    # Normalize backslashes to forward slashes for the component scan so a Windows-style
+    # "..\\.." is caught on every platform.
+    norm = name.replace(chr(92), "/")
+    if ".." in norm.split("/"):
+        raise ValueError(f"refusing manifest file name with '..' path component: {name!r}")
+    # Plain-basename only: os.path.basename must equal the name, it must not be absolute, and
+    # it must carry no drive/UNC prefix (os.path.splitdrive catches 'C:' and '\\\\host\\share').
+    if os.path.basename(name) != name:
+        raise ValueError(f"refusing non-basename manifest file name: {name!r}")
+    if os.path.isabs(name):
+        raise ValueError(f"refusing absolute manifest file name: {name!r}")
+    drive, _ = os.path.splitdrive(name)
+    if drive:
+        raise ValueError(f"refusing manifest file name with drive/UNC prefix: {name!r}")
+    joined = os.path.join(bundle_dir, name)
+    # Defense-in-depth: confirm the resolved path is contained in the resolved bundle dir.
+    real_dir = os.path.realpath(bundle_dir)
+    real_join = os.path.realpath(joined)
+    prefix = real_dir + os.sep
+    if real_join != real_dir and not real_join.startswith(prefix):
+        raise ValueError(
+            f"refusing manifest file name that escapes the bundle dir: {name!r}"
+        )
+    return joined
+
+
+def _sha256_file(path: str) -> str:
+    """Return the lowercase hex SHA-256 of a file's bytes (streamed, constant memory)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def read_bundle_manifest(bundle_dir: str) -> Dict:
     """Parse <bundle_dir>/bundle.json and return the manifest dict.
 
     A bundle is produced by the Suicide-Marauder repo's host/provision.py: it's a directory
     holding bundle.json plus the .bin images. The manifest must carry a "files" list whose
     entries each name a file and an offset ("offset_hex" like "0x10000", or an int "offset").
+    Each entry may also carry a "sha256" hex digest of the image bytes (newer bundles), which
+    flash_suicide enforces before flashing.
+
+    Each entry's file name is validated as a plain basename that resolves inside bundle_dir
+    (path-traversal hardening): a non-basename / absolute / drive-or-UNC / ".."-bearing name is
+    rejected with ValueError so a tampered manifest can never point the flasher at a file outside
+    the bundle.
 
     Raises FileNotFoundError if bundle.json is missing, ValueError if it's malformed.
     eFuse/T2 provisioning is NOT described or performed here — see the module docstring.
@@ -713,6 +768,13 @@ def read_bundle_manifest(bundle_dir: str) -> Dict:
             raise ValueError(f'bundle.json "files"[{i}] must be an object with a "file" key')
         if entry.get("offset_hex") is None and entry.get("offset") is None:
             raise ValueError(f'bundle.json "files"[{i}] is missing an "offset_hex"/"offset"')
+        # Reject path-traversal in the file name HERE, before any file is opened or esptool is
+        # invoked. _safe_bundle_join raises ValueError on a non-basename / absolute / drive-or-
+        # UNC / ".."-bearing / dir-escaping name.
+        try:
+            _safe_bundle_join(bundle_dir, entry["file"])
+        except ValueError as e:
+            raise ValueError(f'bundle.json "files"[{i}] has an unsafe file name: {e}')
     return manifest
 
 
@@ -727,9 +789,14 @@ def flash_suicide(port: str, chip: str, bundle_dir: str, on_line: Line,
                   baud: int = 921600) -> int:
     """Flash a pre-provisioned Suicide-Marauder bundle in ONE esptool write_flash.
 
-    Reads bundle.json, validates every listed .bin exists (lists any that don't), warns if the
+    Reads bundle.json, validates every listed .bin name is a safe in-bundle basename and exists
+    (lists any that don't), verifies each image's SHA-256 against the manifest (present sha256 is
+    enforced, missing sha256 warns and is allowed for older bundles — TOFU), warns if the
     manifest's chip disagrees with `chip`, then writes all offset/path pairs (sorted by offset)
     in a single `write_flash -z --flash_size detect`. Mirrors flash() for reset/size handling.
+
+    A path-traversal-unsafe manifest file name raises ValueError (esptool is never invoked); a
+    sha256 mismatch aborts with rc 2 before any esptool call (defense-in-depth vs a tampered bundle).
 
     This NEVER burns eFuses and does NO T2/secure-boot provisioning — the Suicide-Marauder host
     provisioner does that; here we only flash an already-provisioned bundle. Returns the rc.
@@ -742,17 +809,46 @@ def flash_suicide(port: str, chip: str, bundle_dir: str, on_line: Line,
                 f"— flash will likely fail or brick; double-check the selected chip")
 
     # Resolve every entry to (offset, absolute path); collect any missing files first so we can
-    # report them all at once instead of failing on the first one.
+    # report them all at once instead of failing on the first one. Every file name is run through
+    # _safe_bundle_join (path-traversal hardening) — a bad name raises ValueError, which we let
+    # propagate so esptool is NEVER invoked on a tampered manifest. read_bundle_manifest already
+    # validated the names, but we re-validate here so flash_suicide is safe even if a caller passes
+    # a manifest it built itself.
     pairs: List[Tuple[int, str]] = []
     missing: List[str] = []
     for entry in manifest["files"]:
-        abs_path = os.path.join(bundle_dir, entry["file"])
+        abs_path = _safe_bundle_join(bundle_dir, entry["file"])
         if not os.path.isfile(abs_path):
             missing.append(entry["file"])
             continue
         pairs.append((_bundle_offset(entry), abs_path))
     if missing:
         on_line("[error] bundle is missing file(s): " + ", ".join(missing))
+        return 2
+
+    # Integrity check (defense-in-depth vs a tampered bundle): recompute each image's SHA-256 and
+    # compare to the manifest. ABORT on mismatch so we never flash an image whose bytes don't match
+    # what the provisioner recorded. Back-compat (TOFU): an entry with NO "sha256" is allowed but
+    # warned (older bundles predate this field); a present "sha256" is ENFORCED. Done before any
+    # esptool call.
+    integrity_failed: List[str] = []
+    for entry in manifest["files"]:
+        name = entry["file"]
+        abs_path = _safe_bundle_join(bundle_dir, name)
+        expected = entry.get("sha256")
+        if not expected:
+            on_line(f"[WARNING] bundle entry {name!r} has no sha256 (older bundle); "
+                    f"flashing WITHOUT integrity verification for this file (TOFU)")
+            continue
+        actual = _sha256_file(abs_path)
+        if actual.lower() != str(expected).lower():
+            on_line(f"[error] sha256 MISMATCH for {name!r}: "
+                    f"manifest {str(expected).lower()} != actual {actual}")
+            integrity_failed.append(name)
+    if integrity_failed:
+        on_line("[error] aborting flash: integrity check failed for: "
+                + ", ".join(integrity_failed)
+                + " (bundle may be corrupt or tampered; re-provision and try again)")
         return 2
 
     pairs.sort(key=lambda p: p[0])
