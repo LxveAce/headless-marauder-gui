@@ -3,7 +3,7 @@
 Headless Marauder TUI — a terminal application (Textual) for Kali Linux.
 
 Runs entirely in the terminal: a command tree on the left, live serial output on
-the right, a raw command box at the bottom. Great over SSH / on the deck console.
+the right, a raw command box at the bottom. Great over SSH / on a headless console.
 
 Run:   python3 tui/app.py            (auto-detects the port)
        python3 tui/app.py --port /dev/ttyUSB0
