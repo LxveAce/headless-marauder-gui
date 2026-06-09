@@ -193,6 +193,56 @@ PCAP/Evil-Portal/wardrive output lives on the **board's SD card** (pull it over 
 **Update app only** (existing board) or **Full flash** (blank board). Uses `esptool` with
 `--flash_size detect`. Classic ESP32 Gold → a non-S3 variant (e.g. *old_hardware*); S3 → *MultiBoard S3*.
 
+> **Tooltips:** every flasher control — including the **Suicide** checkbox and its bundle-dir
+> field — has a hover tooltip explaining what it does.
+
+---
+
+## 8. Suicide build & flashing it (anti-forensic, opt-in)
+
+This is an **optional, owner-only, defensive** layer. Plain Marauder is the default; the suicide
+path is gated behind a single **Suicide** checkbox and changes nothing unless you tick it.
+
+### What it is
+A hardened Marauder variant that can **wipe its own secrets** so a lost or seized board protects
+the data on it. The provisioned bundle bakes in:
+- a **boot password** gate (the board won't come up without it),
+- a **2-fail wipe** (too many wrong password attempts triggers the configured wipe),
+- a **GPIO dead-man** trigger (a pin/check-in the owner controls; if it's tripped/stops, the
+  protective action runs).
+
+This app does **not** build, configure, hash, or arm any of that. It only **flashes** an image
+that was already provisioned elsewhere.
+
+### Where it's built: the Suicide-Marauder repo
+You build and provision the bundle in the **separate private repo
+[LxveAce/Suicide-Marauder](https://github.com/LxveAce/Suicide-Marauder)** (its `host/` provisioner).
+That repo does all the sensitive work — password hashing, guard configuration, and any eFuse /
+flash-encryption (T2) burning. The provisioner emits a **bundle**: a directory holding a
+`bundle.json` manifest plus the firmware `.bin` images and their flash offsets.
+
+> Read the Suicide-Marauder repo's **SAFETY.md** first, and don't let this guide contradict it —
+> the provisioning repo is the source of truth for how the protections behave and how to arm them.
+
+### Flashing the bundle from here
+1. Build + provision the bundle in the Suicide-Marauder repo (follow its README/SAFETY.md).
+2. In the flasher, tick the **Suicide** checkbox and point its field at the **bundle directory**
+   (the folder containing `bundle.json` and the `.bin` files).
+3. **Detect chip** — the manifest names the chip it was built for; the flasher warns if it
+   disagrees with the detected chip (a mismatch will likely fail or brick the board).
+4. **FLASH** — it writes every offset/image pair from the manifest in one
+   `write_flash -z --flash_size detect`. No eFuses are burned here; no T2 is performed here.
+
+### Safety
+- **Test `SUICIDE_SAFE_MODE` first.** Provision and run the bundle in the Suicide-Marauder repo's
+  safe mode before any live build, so you can confirm the password gate and triggers behave as
+  expected **without** performing a destructive wipe. Validate the whole flow in safe mode, then
+  graduate to the real build.
+- **T2 / flash encryption is irreversible.** If the bundle was provisioned to burn T2
+  (flash-encryption eFuses), that is a **one-way, permanent** change to the chip — it cannot be
+  undone. Be certain before flashing such a bundle.
+- This is for **your own** hardware only, as a duress/loss/seizure safeguard — not an attack tool.
+
 ---
 
 ## Legal

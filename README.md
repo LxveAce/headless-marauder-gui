@@ -25,6 +25,8 @@ in any environment (and can auto-start headless on a deck).
 - **Live tables** — `scanap` auto-fills the **Access Points** tab (and the TUI table); APs/Stations parsed straight off the serial stream and de-duplicated.
 - **Target picker** — click *Select APs* and check the networks you want; it builds the correct `select -a 0,2,5` from Marauder's real indices (manual entry still available).
 - **Built-in firmware flasher** — detects the chip (classic ESP32 vs S3), pulls the right firmware variant from the official GitHub release, and flashes at the correct offsets with `--flash_size detect`. App-only update *or* full blank-board flash. Wraps `esptool`.
+- **Suicide build (anti-forensic), opt-in** — a single **Suicide** checkbox in the flasher points at a pre-built **bundle** directory and flashes a provisioned anti-forensic image (boot password + 2-fail wipe + GPIO dead-man) instead of a plain release. The bundle is **built and provisioned in the separate private repo [LxveAce/Suicide-Marauder](https://github.com/LxveAce/Suicide-Marauder)** (it does the password hashing / eFuse + flash-encryption work); this app only flashes the already-provisioned `bundle.json` + `.bin` images. **Plain Marauder stays the default** — leave the box unchecked and nothing changes.
+- **Hover tooltips** — hover any control (buttons, flasher fields, the Suicide checkbox) for a one-line tooltip explaining what it does.
 - **Data logging** — capture the raw serial stream + a live `latest.json` snapshot + `aps.csv`/`stations.csv` to a folder you choose; `tail -f`-friendly for other tools/devices.
 - **Built-in help** — hover any command for a description; an in-app **Guide** tab (the full [GUIDE.md](GUIDE.md)) explains every tool and how to **chain scanning + attacks** and feed the results into other software (Wireshark, hashcat, WiGLE, Kismet…).
 - **Self-update** — *Help → Check for Updates* runs `git pull` + reinstall from this repo.
@@ -76,6 +78,8 @@ python3 gui_qt/app.py                   # or: gui/app.py  /  tui/app.py
 
 **Flashing:** *⚡ Flash Firmware* → **Detect chip** → **Load release list** → pick a variant → **Update app only** (existing board) or **Full flash** (blank board) → **FLASH**.
 
+**Suicide build (anti-forensic, opt-in):** build + provision the bundle first in the separate **[LxveAce/Suicide-Marauder](https://github.com/LxveAce/Suicide-Marauder)** repo, then in the flasher tick the **Suicide** checkbox and point it at that bundle directory (the one holding `bundle.json` + the `.bin` images) → **Detect chip** → **FLASH**. This flashes the provisioned anti-forensic image (boot password + 2-fail wipe + GPIO dead-man); the app never burns eFuses or hashes passwords — that all happens during provisioning in the Suicide-Marauder repo. Unchecked, flashing is plain Marauder as above. Read that repo's **SAFETY.md** and test in safe mode first (see [GUIDE.md](GUIDE.md)).
+
 **Logging:** toggle **● Log** (or *File → Set Log Folder*). Writes to `~/marauder-logs` by default — `serial-*.log`, `latest.json`, `aps.csv`, `stations.csv`, all live-readable.
 
 ---
@@ -109,6 +113,8 @@ One command catalog and one parser feed all three front-ends; the serial layer s
 For **authorized security testing only** — use against networks and devices you own or have
 explicit written permission to test. WiFi deauthentication, evil-portal, and BLE-spam features can
 be illegal to use against others (e.g. US CFAA, FCC rules). You are responsible for how you use this.
+
+The optional **suicide build** is an owner-only, **defensive** measure for protecting the data on *your own* device under duress, loss, or seizure — not an attack tool. Provision and use it only on hardware you own, and read the Suicide-Marauder repo's **[SAFETY.md](https://github.com/LxveAce/Suicide-Marauder/blob/main/SAFETY.md)** before enabling it.
 
 ## Credits & License
 
