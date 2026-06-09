@@ -242,14 +242,47 @@ table.data td.rssi { font-weight:bold; }
 
     <!-- suicide panel (hidden until the checkbox is ticked) -->
     <div id="flash-suicide-panel" style="display:none;">
-      <label>Bundle dir</label>
-      <input id="flash-bundle-dir" placeholder="folder containing bundle.json + .bin images" autocomplete="off"
-             title="Folder produced by the Suicide-Marauder provisioner: bundle.json plus its firmware .bin images. This app flashes exactly these files — it does not build them.">
-      <p class="flash-danger" title="This build can erase its own secrets when triggered. Verify behaviour in SAFE_MODE before relying on it. Owner-only, defensive use.">
-        &#x26a0; SAFETY: Flashes a provisioned anti-forensic build (boot password + 2-fail wipe + GPIO dead-man). Build/provision the bundle in the separate Suicide-Marauder repo; test SAFE_MODE first.
+      <label>Mode</label>
+      <div class="flash-row">
+        <label class="inline"><input type="radio" name="suicide-mode" value="new" checked> Provision new bundle</label>
+        <label class="inline"><input type="radio" name="suicide-mode" value="existing"> Flash existing bundle</label>
+      </div>
+
+      <div id="suicide-new-panel">
+        <label>Boot password</label>
+        <input id="suicide-pw" type="password" placeholder="Boot password" autocomplete="new-password">
+        <label>Confirm password</label>
+        <input id="suicide-pw2" type="password" placeholder="Confirm password" autocomplete="new-password">
+        <label>Variant</label>
+        <select id="suicide-variant">
+          <option value="fork">fork (standard)</option>
+          <option value="guardian">guardian (dual-app)</option>
+        </select>
+        <label>Arm GPIO pin (0-48)</label>
+        <input id="suicide-arm-pin" type="number" value="27" min="0" max="48">
+        <label>Max fail attempts (1-10)</label>
+        <input id="suicide-max-att" type="number" value="2" min="1" max="10">
+        <label class="inline" style="margin-top:8px;">
+          <input type="checkbox" id="suicide-deadman" checked> Dead-man switch
+        </label>
+        <label class="inline" style="margin-top:4px;">
+          <input type="checkbox" id="suicide-armed"> Armed (board WILL self-destruct on trigger)
+        </label>
+        <label>Build directory (optional, for compiled firmware)</label>
+        <input id="suicide-build-dir" placeholder="path to compiled firmware (optional)" autocomplete="off">
+      </div>
+
+      <div id="suicide-existing-panel" style="display:none;">
+        <label>Bundle dir</label>
+        <input id="flash-bundle-dir" placeholder="folder containing bundle.json + .bin images" autocomplete="off"
+               title="Folder produced by the provisioner: bundle.json plus firmware .bin images.">
+      </div>
+
+      <p class="flash-danger">
+        &#x26a0; SAFETY: Anti-forensic build (boot password + 2-fail wipe + GPIO dead-man). Test in SAFE_MODE first.
       </p>
-      <p class="flash-note" title="Flash Encryption / Secure Boot is burned into eFuses during provisioning by the Suicide-Marauder repo. This app never burns eFuses.">
-        eFuse / T2 (Flash Encryption + Secure Boot) is an IRREVERSIBLE operation done in the Suicide-Marauder repo, NOT here. This app only flashes an already-provisioned bundle.
+      <p class="flash-note">
+        Password is hashed locally (PBKDF2-HMAC-SHA256), never stored or transmitted. eFuses are NOT burned here.
       </p>
     </div>
 
@@ -671,6 +704,14 @@ document.getElementById("flash-profile").onchange = () => {
 
 document.getElementById("flash-suicide").onchange = applyFlashProfileUi;
 
+document.addEventListener('change', (e) => {
+  if (e.target.name === 'suicide-mode') {
+    const isNew = e.target.value === 'new';
+    document.getElementById('suicide-new-panel').style.display = isNew ? 'block' : 'none';
+    document.getElementById('suicide-existing-panel').style.display = isNew ? 'none' : 'block';
+  }
+});
+
 document.getElementById("flash-detect-btn").onclick = () => {
   const port = document.getElementById("flash-port").value.trim();
   if (!port) { appendConsole("[flash error] enter a port first", "err"); return; }
@@ -700,12 +741,36 @@ document.getElementById("flash-go-btn").onclick = () => {
 
   // Suicide-bundle path.
   if (profile && profile.supports_suicide && document.getElementById("flash-suicide").checked) {
-    const bundleDir = document.getElementById("flash-bundle-dir").value.trim();
-    if (!bundleDir) { appendConsole("[flash error] enter the bundle directory", "err"); return; }
-    if (!confirm(`Flash a SUICIDE / anti-forensic bundle for "${profile.label}" to ${port}?\n\n`
-               + "This is an opt-in self-wipe-capable build. Test in SAFE_MODE first. Don't unplug.")) return;
-    setFlashBusy(true);
-    socket.emit("flash_suicide_run", {port, chip, bundle_dir: bundleDir, baud});
+    const suicideMode = document.querySelector('input[name="suicide-mode"]:checked').value;
+    if (suicideMode === "existing") {
+      const bundleDir = document.getElementById("flash-bundle-dir").value.trim();
+      if (!bundleDir) { appendConsole("[flash error] enter the bundle directory", "err"); return; }
+      if (!confirm(`Flash suicide bundle to ${port}?\nTest in SAFE_MODE first. Don't unplug.`)) return;
+      setFlashBusy(true);
+      socket.emit("flash_suicide_run", {port, chip, bundle_dir: bundleDir, baud});
+    } else {
+      const pw = document.getElementById("suicide-pw").value;
+      const pw2 = document.getElementById("suicide-pw2").value;
+      if (!pw) { appendConsole("[flash error] enter a boot password", "err"); return; }
+      if (pw !== pw2) { appendConsole("[flash error] passwords don't match", "err"); return; }
+      const armed = document.getElementById("suicide-armed").checked ? 1 : 0;
+      let msg = `Provision + flash suicide build to ${port}?\nPassword is hashed locally, never stored.`;
+      if (armed) msg += "\n\nWARNING: ARMED=1 — board WILL self-destruct on trigger!";
+      if (!confirm(msg)) return;
+      setFlashBusy(true);
+      socket.emit("flash_suicide_provision", {
+        port, chip, baud,
+        password: pw, password2: pw2,
+        variant: document.getElementById("suicide-variant").value,
+        arm_pin: parseInt(document.getElementById("suicide-arm-pin").value, 10) || 27,
+        max_att: parseInt(document.getElementById("suicide-max-att").value, 10) || 2,
+        deadman: document.getElementById("suicide-deadman").checked ? 1 : 0,
+        armed,
+        build_dir: document.getElementById("suicide-build-dir").value.trim() || null,
+      });
+      document.getElementById("suicide-pw").value = "";
+      document.getElementById("suicide-pw2").value = "";
+    }
     return;
   }
 

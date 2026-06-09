@@ -352,52 +352,123 @@ class FlasherDialog(QDialog):
         lay.addWidget(self.local_row_w)
 
         # --- suicide-build path (opt-in, hidden until the checkbox is ticked) -- #
-        self.suicide_cb = QCheckBox("Suicide build (flash a provisioned anti-forensic bundle)")
-        self.suicide_cb.setToolTip(GLOSSARY.get("suicide build", "Owner-only hardened build that can self-wipe."))
+        self.suicide_cb = QCheckBox("Suicide build (provision + flash anti-forensic bundle)")
+        self.suicide_cb.setToolTip("Owner-only hardened build that can self-wipe. "
+                                   "Provisions a bundle with your password and flashes it.")
         self.suicide_cb.stateChanged.connect(self._toggle_suicide)
         lay.addWidget(self.suicide_cb)
 
-        self.suicide_panel = QGroupBox("Suicide bundle")
-        self.suicide_panel.setToolTip(GLOSSARY.get("bundle", "A provisioned folder: bundle.json plus the .bin images."))
+        self.suicide_panel = QGroupBox("Suicide build config")
         spv = QVBoxLayout(self.suicide_panel)
 
-        bdrow = QHBoxLayout()
-        bdrow.addWidget(QLabel("Bundle dir:"))
+        # Mode: provision new bundle vs flash existing
+        self.suicide_mode_new = QRadioButton("Provision new bundle")
+        self.suicide_mode_new.setToolTip("Enter a password and config — the app hashes it locally and builds "
+                                         "a fresh bundle, then flashes it.")
+        self.suicide_mode_new.setChecked(True)
+        self.suicide_mode_existing = QRadioButton("Flash existing bundle")
+        self.suicide_mode_existing.setToolTip("Point at a bundle directory (bundle.json + .bin images) "
+                                              "already provisioned externally.")
+        smrow = QHBoxLayout()
+        smrow.addWidget(self.suicide_mode_new)
+        smrow.addWidget(self.suicide_mode_existing)
+        smrow.addStretch()
+        spv.addLayout(smrow)
+        self.suicide_mode_new.toggled.connect(self._toggle_suicide_mode)
+
+        # --- provision sub-panel (new bundle) ---
+        self.provision_panel = QWidget()
+        ppv = QFormLayout(self.provision_panel)
+        ppv.setContentsMargins(0, 4, 0, 0)
+
+        self.s_pw = QLineEdit()
+        self.s_pw.setEchoMode(QLineEdit.Password)
+        self.s_pw.setPlaceholderText("boot password")
+        self.s_pw.setToolTip("Boot password — hashed locally with PBKDF2-HMAC-SHA256. "
+                             "Never stored, never logged, never sent anywhere.")
+        ppv.addRow("Password:", self.s_pw)
+
+        self.s_pw2 = QLineEdit()
+        self.s_pw2.setEchoMode(QLineEdit.Password)
+        self.s_pw2.setPlaceholderText("confirm password")
+        self.s_pw2.setToolTip("Re-enter to confirm. Passwords must match.")
+        ppv.addRow("Confirm:", self.s_pw2)
+
+        self.s_variant = QComboBox()
+        self.s_variant.addItems(["fork", "guardian"])
+        self.s_variant.setToolTip("fork (default): boots into Marauder with password gate. "
+                                  "guardian: boots into a factory gate that protects Marauder in OTA slot.")
+        ppv.addRow("Variant:", self.s_variant)
+
+        self.s_arm_pin = QSpinBox()
+        self.s_arm_pin.setRange(0, 48)
+        self.s_arm_pin.setValue(27)
+        self.s_arm_pin.setToolTip("GPIO number for the dead-man arming switch (default 27).")
+        ppv.addRow("Arm GPIO:", self.s_arm_pin)
+
+        self.s_arm_level = QComboBox()
+        self.s_arm_level.addItems(["HIGH (1)", "LOW (0)"])
+        self.s_arm_level.setToolTip("Logic level that means ARMED. Default HIGH.")
+        ppv.addRow("Arm level:", self.s_arm_level)
+
+        self.s_deadman = QCheckBox("Dead-man: cut/missing switch wipes when armed")
+        self.s_deadman.setChecked(True)
+        self.s_deadman.setToolTip("When armed, a cut or disconnected arming wire triggers a wipe at boot.")
+        ppv.addRow(self.s_deadman)
+
+        self.s_max_att = QSpinBox()
+        self.s_max_att.setRange(1, 10)
+        self.s_max_att.setValue(2)
+        self.s_max_att.setToolTip("Wrong password attempts before wipe (default 2). Survives power cycles.")
+        ppv.addRow("Max attempts:", self.s_max_att)
+
+        self.s_armed = QCheckBox("ARM now (default OFF / DISARMED)")
+        self.s_armed.setToolTip("Master arm. Default OFF. A disarmed board can never wipe. "
+                                "Only check this on a board you've tested in SAFE_MODE.")
+        ppv.addRow(self.s_armed)
+
+        bdrow2 = QHBoxLayout()
+        self.s_build_dir = QLineEdit()
+        self.s_build_dir.setPlaceholderText("(optional) folder with compiled firmware .bin files")
+        self.s_build_dir.setToolTip("Path to compiled suicide firmware (bootloader.bin, partitions.bin, "
+                                    "app.bin, boot_app0.bin). Leave blank if firmware is already in "
+                                    "the output directory, or to provision config only.")
+        bdrow2.addWidget(self.s_build_dir)
+        bdb = QPushButton("Browse")
+        bdb.setToolTip("Select the directory containing compiled firmware binaries.")
+        bdb.clicked.connect(lambda: self._browse_dir(self.s_build_dir))
+        bdrow2.addWidget(bdb)
+        ppv.addRow("Build dir:", bdrow2)
+
+        spv.addWidget(self.provision_panel)
+
+        # --- existing bundle sub-panel ---
+        self.existing_panel = QWidget()
+        epv = QHBoxLayout(self.existing_panel)
+        epv.setContentsMargins(0, 4, 0, 0)
+        epv.addWidget(QLabel("Bundle dir:"))
         self.bundle_dir = QLineEdit()
         self.bundle_dir.setPlaceholderText("folder containing bundle.json + .bin images")
-        self.bundle_dir.setToolTip(GLOSSARY.get("bundle", "Folder produced by the Suicide-Marauder provisioner: "
-                                    "bundle.json plus its firmware .bin images."))
+        self.bundle_dir.setToolTip("Folder with an already-provisioned bundle: bundle.json plus .bin images.")
         self.bundle_dir.textChanged.connect(self._bundle_changed)
-        bdrow.addWidget(self.bundle_dir)
+        epv.addWidget(self.bundle_dir)
         self.bundle_browse = QPushButton("Browse")
-        self.bundle_browse.setToolTip("Pick the provisioned bundle folder (the one holding bundle.json).")
+        self.bundle_browse.setToolTip("Pick the provisioned bundle folder.")
         self.bundle_browse.clicked.connect(self._browse_bundle)
-        bdrow.addWidget(self.bundle_browse)
-        spv.addLayout(bdrow)
+        epv.addWidget(self.bundle_browse)
+        spv.addWidget(self.existing_panel)
+        self.existing_panel.setVisible(False)
 
-        self.bundle_summary = QLabel("No bundle loaded.")
+        self.bundle_summary = QLabel("")
         self.bundle_summary.setWordWrap(True)
-        self.bundle_summary.setToolTip("Read-only summary parsed from bundle.json: variant, chip and file count. "
-                                       "This app flashes exactly these files — it does not build them.")
         spv.addWidget(self.bundle_summary)
 
         self.suicide_note = QLabel(
-            "⚠ SAFETY: flashes an anti-forensic build that can self-wipe; test in SAFE_MODE; "
-            "provision the bundle with the Suicide-Marauder repo.")
+            "⚠ SAFETY: this build can self-wipe. Test in SAFE_MODE first. "
+            "Read suicide/docs/SAFETY.md before arming.")
         self.suicide_note.setWordWrap(True)
         self.suicide_note.setStyleSheet("color:#ff4d4d; font-weight:bold;")
-        self.suicide_note.setToolTip("This build can erase its own secrets when triggered. Verify behaviour in "
-                                     "SAFE_MODE before relying on it. Owner-only, defensive use.")
         spv.addWidget(self.suicide_note)
-
-        self.t2_cb = QCheckBox(
-            "T2: Flash Encryption + Secure Boot (IRREVERSIBLE eFuse — provisioned via "
-            "Suicide-Marauder, not flashed here)")
-        self.t2_cb.setToolTip(GLOSSARY.get("flash encryption/t2",
-                              "Flash Encryption / Secure Boot is burned into eFuses during provisioning by the "
-                              "Suicide-Marauder repo. This app never burns eFuses; this box only shows a warning."))
-        self.t2_cb.stateChanged.connect(self._t2_info)
-        spv.addWidget(self.t2_cb)
 
         lay.addWidget(self.suicide_panel)
         self.suicide_panel.setVisible(False)
@@ -547,6 +618,18 @@ class FlasherDialog(QDialog):
         # suicide toggle and the firmware-profile selection stay consistent.
         self._apply_profile_ui()
 
+    def _toggle_suicide_mode(self):
+        """Switch between provision-new and flash-existing sub-panels."""
+        is_new = self.suicide_mode_new.isChecked()
+        self.provision_panel.setVisible(is_new)
+        self.existing_panel.setVisible(not is_new)
+        self.bundle_summary.setText("")
+
+    def _browse_dir(self, line_edit):
+        d = QFileDialog.getExistingDirectory(self, "Select folder", line_edit.text().strip())
+        if d:
+            line_edit.setText(d)
+
     def _browse_bundle(self):
         d = QFileDialog.getExistingDirectory(self, "Select bundle folder", self.bundle_dir.text().strip())
         if d:
@@ -556,28 +639,18 @@ class FlasherDialog(QDialog):
         """Parse bundle.json (if present) and show a read-only manifest summary."""
         path = self.bundle_dir.text().strip()
         if not path:
-            self.bundle_summary.setText("No bundle loaded.")
+            self.bundle_summary.setText("")
             return
         try:
             m = flasher.read_bundle_manifest(path)
         except Exception as e:
             self.bundle_summary.setText(f"⚠ {e}")
             return
-        # Same sanitization as the confirm dialog: a tampered bundle.json can't spoof this summary.
         variant = _clean_manifest_field(m.get("variant") or m.get("name"))
         chip = _clean_manifest_field(m.get("chip"), max_len=24)
         count = len(m.get("files", []))
         self.bundle_summary.setText(
             f"variant: {variant}    chip: {chip}    files: {count}")
-
-    def _t2_info(self):
-        """The T2 box is purely informational — it never burns eFuses or flashes anything."""
-        if self.t2_cb.isChecked():
-            QMessageBox.information(
-                self, "T2: Flash Encryption + Secure Boot",
-                "Flash Encryption + Secure Boot is an IRREVERSIBLE eFuse operation.\n\n"
-                "It is provisioned by the Suicide-Marauder repo, NOT flashed here. This app "
-                "never burns eFuses — this checkbox only shows this notice.")
 
     def _resolve_chip(self, port):
         if self.chip:
@@ -639,40 +712,91 @@ class FlasherDialog(QDialog):
         self._work(job)
 
     def _flash_suicide(self, port):
-        """Flash a pre-provisioned Suicide-Marauder bundle (opt-in path).
-
-        Validates the bundle dir + manifest on the GUI thread, names the board in a
-        confirmation, then routes to flasher.flash_suicide() on the worker thread. This
-        only FLASHES an already-provisioned bundle; it never burns eFuses (see flasher.py)."""
-        bundle_dir = self.bundle_dir.text().strip()
-        if not bundle_dir:
-            QMessageBox.information(self, "Bundle", "Pick a bundle folder (the one with bundle.json).")
-            return
-        try:
-            manifest = flasher.read_bundle_manifest(bundle_dir)
-        except Exception as e:
-            QMessageBox.warning(self, "Bundle", f"Can't read bundle.json:\n{e}")
-            return
-        # Sanitize the operator-facing fields: a tampered bundle.json must NOT be able to spoof the
-        # confirmation (control chars, newlines, or an over-long string that hides the warning).
-        board = _clean_manifest_field(
-            manifest.get("variant") or manifest.get("name") or manifest.get("board"))
-        man_chip = _clean_manifest_field(manifest.get("chip"), max_len=24)
-        if QMessageBox.question(
-                self, "Confirm suicide-build flash",
-                f"Flash anti-forensic bundle to board '{board}' ({man_chip}) via {port}?\n\n"
-                f"This is an opt-in self-wipe-capable build. Test in SAFE_MODE first.\n"
-                f"Don't unplug while flashing.") != QMessageBox.Yes:
-            return
-        # capture widget values on the GUI thread before the worker starts
+        """Provision (if new) and flash a suicide bundle."""
         baud = int(self.baud.currentText())
+
+        if self.suicide_mode_existing.isChecked():
+            # --- existing bundle path (unchanged) ---
+            bundle_path = self.bundle_dir.text().strip()
+            if not bundle_path:
+                QMessageBox.information(self, "Bundle", "Pick a bundle folder (the one with bundle.json).")
+                return
+            try:
+                manifest = flasher.read_bundle_manifest(bundle_path)
+            except Exception as e:
+                QMessageBox.warning(self, "Bundle", f"Can't read bundle.json:\n{e}")
+                return
+            board = _clean_manifest_field(
+                manifest.get("variant") or manifest.get("name") or manifest.get("board"))
+            man_chip = _clean_manifest_field(manifest.get("chip"), max_len=24)
+            if QMessageBox.question(
+                    self, "Confirm suicide-build flash",
+                    f"Flash anti-forensic bundle '{board}' ({man_chip}) via {port}?\n\n"
+                    f"This build can self-wipe. Test in SAFE_MODE first.\n"
+                    f"Don't unplug while flashing.") != QMessageBox.Yes:
+                return
+            self._free()
+
+            def job():
+                chip = self._resolve_chip(port)
+                if not chip:
+                    self._log("[error] chip unknown"); return
+                rc = flasher.flash_suicide(port, chip, bundle_path, self._log, baud=baud)
+                self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
+            self._work(job)
+            return
+
+        # --- provision new bundle path ---
+        pw = self.s_pw.text()
+        pw2 = self.s_pw2.text()
+        if not pw:
+            QMessageBox.warning(self, "Password", "Enter a boot password."); return
+        if pw != pw2:
+            QMessageBox.warning(self, "Password", "Passwords don't match."); return
+        variant = self.s_variant.currentText()
+        armed = int(self.s_armed.isChecked())
+        arm_level = 1 if self.s_arm_level.currentIndex() == 0 else 0
+        build_dir = self.s_build_dir.text().strip() or None
+
+        confirm_msg = (
+            f"Provision + flash a suicide build via {port}?\n\n"
+            f"variant={variant}  armed={armed}  max_att={self.s_max_att.value()}\n"
+            f"The password is hashed locally and never stored.\n"
+        )
+        if armed:
+            confirm_msg += "\n⚠ ARMED=1 — the board WILL self-destruct on trigger conditions!"
+        confirm_msg += "\nDon't unplug while flashing."
+        if QMessageBox.question(self, "Confirm suicide-build", confirm_msg) != QMessageBox.Yes:
+            return
+
+        # Capture all config on GUI thread
+        config = dict(
+            password=pw,
+            variant=variant,
+            arm_pin=self.s_arm_pin.value(),
+            arm_level=arm_level,
+            arm_pull=2 if arm_level == 1 else 1,
+            deadman=int(self.s_deadman.isChecked()),
+            armed=armed,
+            max_att=self.s_max_att.value(),
+            build_dir=build_dir,
+        )
+        # Clear password fields immediately
+        self.s_pw.clear()
+        self.s_pw2.clear()
         self._free()
 
         def job():
             chip = self._resolve_chip(port)
             if not chip:
                 self._log("[error] chip unknown"); return
-            rc = flasher.flash_suicide(port, chip, bundle_dir, self._log, baud=baud)
+            try:
+                import suicide
+                bundle_path = suicide.build_bundle(
+                    chip=chip, on_line=self._log, **config)
+            except Exception as e:
+                self._log(f"[error] provisioning failed: {e}"); return
+            rc = flasher.flash_suicide(port, chip, bundle_path, self._log, baud=baud)
             self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
         self._work(job)
 
