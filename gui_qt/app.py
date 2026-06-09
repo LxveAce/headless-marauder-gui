@@ -33,6 +33,9 @@ from PyQt5.QtWidgets import (
 from marauder_core import (
     MarauderController, MarauderParser, CaptureLogger, commands, flasher, updater, __version__,
 )
+from marauder_core import uihelp
+
+GLOSSARY = uihelp.GLOSSARY
 
 # Scan commands that should kick off auto "list" polling so the tables fill themselves.
 _AP_SCANS = {"scanap", "scanall"}
@@ -94,14 +97,18 @@ class ParamDialog(QDialog):
                 w = QComboBox(); w.addItems(p.choices)
             else:
                 w = QLineEdit(); w.setPlaceholderText(p.placeholder or p.help)
-            if p.help or p.placeholder:
-                w.setToolTip(p.help or p.placeholder)
+            # Always give every input a tooltip; fall back to the param name/kind if no help copy.
+            tip = p.help or p.placeholder or f"{p.name} ({p.kind})" + (" — required" if p.required else "")
+            w.setToolTip(tip)
             self.widgets[p.name] = w
             form.addRow(p.name + (" *" if p.required else ""), w)
         lay.addLayout(form)
         row = QHBoxLayout()
         ok = QPushButton("RUN ⚠" if cmd.danger else "Run"); ok.clicked.connect(self._ok)
+        ok.setToolTip("Build and send this command with the values above"
+                      + (" (this is an attack — authorized targets only)" if cmd.danger else "") + ".")
         cancel = QPushButton("Cancel"); cancel.clicked.connect(self.reject)
+        cancel.setToolTip("Close without sending anything.")
         row.addWidget(ok); row.addWidget(cancel); lay.addLayout(row)
         self.values = None
 
@@ -149,11 +156,15 @@ class TargetPicker(QDialog):
 
         row = QHBoxLayout()
         rb = QPushButton(f"⟳ Refresh ({list_cmd})"); rb.clicked.connect(self._refresh); row.addWidget(rb)
+        rb.setToolTip(f"Re-run '{list_cmd}' on the board and repopulate this list with the latest results.")
         self.allbox = QCheckBox("select all"); self.allbox.stateChanged.connect(self._toggle_all); row.addWidget(self.allbox)
+        self.allbox.setToolTip("Check/uncheck every row at once.")
         row.addStretch(); lay.addLayout(row)
 
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["pick", "#", "SSID / MAC", "Ch", "RSSI"])
+        self.table.setToolTip("Check the rows you want to target. The '#' column is the index "
+                              "sent to the board (so selection stays index-accurate).")
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
@@ -164,12 +175,16 @@ class TargetPicker(QDialog):
         mrow = QHBoxLayout()
         mrow.addWidget(QLabel("or type:"))
         self.manual = QLineEdit(); self.manual.setPlaceholderText("indices/filter, e.g.  0,2,5   or   all")
+        self.manual.setToolTip("Type indices/filter to select instead of checking rows "
+                               "(e.g. 0,2,5 or 'all'). If filled, this overrides the checkboxes.")
         mrow.addWidget(self.manual)
         lay.addLayout(mrow)
 
         brow = QHBoxLayout()
         ok = QPushButton("Select"); ok.clicked.connect(self._ok); brow.addWidget(ok)
+        ok.setToolTip(f"Apply the selection — sends '{base} <indices>' to the board.")
         cancel = QPushButton("Cancel"); cancel.clicked.connect(self.reject); brow.addWidget(cancel)
+        cancel.setToolTip("Close without changing the selection.")
         lay.addLayout(brow)
 
         self._populate()
@@ -229,54 +244,152 @@ class FlasherDialog(QDialog):
         self.by_name = {}
         self._busy = False
         self._need_refill = False   # set by worker threads; applied on the GUI thread in _drain
+        # Selected firmware profile (default = marauder, so existing behaviour is unchanged).
+        self.profile = flasher.get_profile("marauder")
 
         lay = QVBoxLayout(self)
+
+        # --- firmware profile selector (additive; default = Marauder) --------- #
+        frow = QHBoxLayout()
+        frow.addWidget(QLabel("Firmware:"))
+        self.fw_combo = QComboBox()
+        self._profiles = flasher.list_profiles()      # [(id, label) ...] in registry order
+        for _pid, _plabel in self._profiles:
+            self.fw_combo.addItem(_plabel)
+        # default to marauder so the existing flow is the default selection
+        for _i, (_pid, _plabel) in enumerate(self._profiles):
+            if _pid == "marauder":
+                self.fw_combo.setCurrentIndex(_i)
+                break
+        self.fw_combo.setToolTip("Which firmware to flash. Defaults to ESP32 Marauder (the normal "
+                                 "flow). Switching re-targets the release list / variant picker at the "
+                                 "selected firmware; the suicide-build option is Marauder-only.")
+        self.fw_combo.currentIndexChanged.connect(self._on_profile_changed)
+        frow.addWidget(self.fw_combo); frow.addStretch()
+        lay.addLayout(frow)
 
         prow = QHBoxLayout()
         prow.addWidget(QLabel("Port:"))
         self.port = QLineEdit(default_port); prow.addWidget(self.port)
+        self.port.setToolTip("Serial port of the board to flash (e.g. COM5 or /dev/ttyUSB0). "
+                             "Same port the app connects on.")
         b = QPushButton("Detect chip"); b.clicked.connect(self._detect); prow.addWidget(b)
+        b.setToolTip("Talk to the board over USB and read which ESP32 chip it is "
+                     "(esp32, esp32s3, ...). Run this once so the right firmware variant is picked.")
         self.chip_lbl = QLabel("chip: ?"); prow.addWidget(self.chip_lbl)
+        self.chip_lbl.setToolTip("The detected chip family. Shows '?' until you press Detect chip.")
         lay.addLayout(prow)
 
-        mrow = QHBoxLayout()
+        # --- normal-mode rows (hidden when 'Suicide build' is checked) -------- #
+        self.mode_row_w = QWidget(); mrow = QHBoxLayout(self.mode_row_w); mrow.setContentsMargins(0, 0, 0, 0)
         mrow.addWidget(QLabel("Mode:"))
         self.mode_app = QRadioButton("Update app only"); self.mode_app.setChecked(True)
+        self.mode_app.setToolTip(GLOSSARY.get("app-only flash", "Update only the application image."))
         self.mode_full = QRadioButton("Full flash (blank board)")
+        self.mode_full.setToolTip(GLOSSARY.get("full flash", "Flash bootloader + partitions + app to a blank board."))
         g = QButtonGroup(self); g.addButton(self.mode_app); g.addButton(self.mode_full)
         mrow.addWidget(self.mode_app); mrow.addWidget(self.mode_full); mrow.addStretch()
-        lay.addLayout(mrow)
+        lay.addWidget(self.mode_row_w)
 
-        srow = QHBoxLayout()
+        self.src_row_w = QWidget(); srow = QHBoxLayout(self.src_row_w); srow.setContentsMargins(0, 0, 0, 0)
         srow.addWidget(QLabel("Firmware:"))
         self.src_dl = QRadioButton("Download latest"); self.src_dl.setChecked(True)
+        self.src_dl.setToolTip("Fetch the official Marauder firmware for your chip from GitHub releases.")
         self.src_local = QRadioButton("Local .bin")
+        self.src_local.setToolTip("Flash a firmware .bin file you already have on disk instead of downloading.")
         sg = QButtonGroup(self); sg.addButton(self.src_dl); sg.addButton(self.src_local)
         srow.addWidget(self.src_dl); srow.addWidget(self.src_local); srow.addStretch()
-        lay.addLayout(srow)
+        lay.addWidget(self.src_row_w)
 
-        drow = QHBoxLayout()
+        self.dl_row_w = QWidget(); drow = QHBoxLayout(self.dl_row_w); drow.setContentsMargins(0, 0, 0, 0)
         lb = QPushButton("Load release list"); lb.clicked.connect(self._load); drow.addWidget(lb)
+        lb.setToolTip("Download the list of available firmware variants from the latest GitHub release.")
         self.showall = QCheckBox("show all chips"); self.showall.stateChanged.connect(self._refill)
+        self.showall.setToolTip("Show firmware variants for every chip, not just the detected one. "
+                                "Leave off to avoid flashing the wrong board's build.")
         drow.addWidget(self.showall)
         self.variant = QComboBox(); self.variant.setMinimumWidth(380); drow.addWidget(self.variant)
-        lay.addLayout(drow)
+        self.variant.setToolTip("Pick the firmware build that matches your exact board/display. "
+                                "The best match for the detected chip is preselected.")
+        lay.addWidget(self.dl_row_w)
 
-        lrow = QHBoxLayout()
+        self.local_row_w = QWidget(); lrow = QHBoxLayout(self.local_row_w); lrow.setContentsMargins(0, 0, 0, 0)
         self.local = QLineEdit(); lrow.addWidget(self.local)
+        self.local.setToolTip("Path to a local firmware .bin to flash (used when 'Local .bin' is selected).")
         bb = QPushButton("Browse"); bb.clicked.connect(self._browse); lrow.addWidget(bb)
-        lay.addLayout(lrow)
+        bb.setToolTip("Pick a firmware .bin file from disk.")
+        lay.addWidget(self.local_row_w)
 
-        arow = QHBoxLayout()
+        # --- suicide-build path (opt-in, hidden until the checkbox is ticked) -- #
+        self.suicide_cb = QCheckBox("Suicide build (flash a provisioned anti-forensic bundle)")
+        self.suicide_cb.setToolTip(GLOSSARY.get("suicide build", "Owner-only hardened build that can self-wipe."))
+        self.suicide_cb.stateChanged.connect(self._toggle_suicide)
+        lay.addWidget(self.suicide_cb)
+
+        self.suicide_panel = QGroupBox("Suicide bundle")
+        self.suicide_panel.setToolTip(GLOSSARY.get("bundle", "A provisioned folder: bundle.json plus the .bin images."))
+        spv = QVBoxLayout(self.suicide_panel)
+
+        bdrow = QHBoxLayout()
+        bdrow.addWidget(QLabel("Bundle dir:"))
+        self.bundle_dir = QLineEdit()
+        self.bundle_dir.setPlaceholderText("folder containing bundle.json + .bin images")
+        self.bundle_dir.setToolTip(GLOSSARY.get("bundle", "Folder produced by the Suicide-Marauder provisioner: "
+                                    "bundle.json plus its firmware .bin images."))
+        self.bundle_dir.textChanged.connect(self._bundle_changed)
+        bdrow.addWidget(self.bundle_dir)
+        self.bundle_browse = QPushButton("Browse")
+        self.bundle_browse.setToolTip("Pick the provisioned bundle folder (the one holding bundle.json).")
+        self.bundle_browse.clicked.connect(self._browse_bundle)
+        bdrow.addWidget(self.bundle_browse)
+        spv.addLayout(bdrow)
+
+        self.bundle_summary = QLabel("No bundle loaded.")
+        self.bundle_summary.setWordWrap(True)
+        self.bundle_summary.setToolTip("Read-only summary parsed from bundle.json: variant, chip and file count. "
+                                       "This app flashes exactly these files — it does not build them.")
+        spv.addWidget(self.bundle_summary)
+
+        self.suicide_note = QLabel(
+            "⚠ SAFETY: flashes an anti-forensic build that can self-wipe; test in SAFE_MODE; "
+            "provision the bundle with the Suicide-Marauder repo.")
+        self.suicide_note.setWordWrap(True)
+        self.suicide_note.setStyleSheet("color:#ff4d4d; font-weight:bold;")
+        self.suicide_note.setToolTip("This build can erase its own secrets when triggered. Verify behaviour in "
+                                     "SAFE_MODE before relying on it. Owner-only, defensive use.")
+        spv.addWidget(self.suicide_note)
+
+        self.t2_cb = QCheckBox(
+            "T2: Flash Encryption + Secure Boot (IRREVERSIBLE eFuse — provisioned via "
+            "Suicide-Marauder, not flashed here)")
+        self.t2_cb.setToolTip(GLOSSARY.get("flash encryption/t2",
+                              "Flash Encryption / Secure Boot is burned into eFuses during provisioning by the "
+                              "Suicide-Marauder repo. This app never burns eFuses; this box only shows a warning."))
+        self.t2_cb.stateChanged.connect(self._t2_info)
+        spv.addWidget(self.t2_cb)
+
+        lay.addWidget(self.suicide_panel)
+        self.suicide_panel.setVisible(False)
+
+        self.arow_w = QWidget(); arow = QHBoxLayout(self.arow_w); arow.setContentsMargins(0, 0, 0, 0)
         arow.addWidget(QLabel("Baud:"))
         self.baud = QComboBox(); self.baud.addItems(["115200", "460800", "921600"]); self.baud.setCurrentText("921600")
         arow.addWidget(self.baud)
+        self.baud.setToolTip(GLOSSARY.get("baud", "Serial transfer speed. Drop to 115200 if a flash stalls."))
         self.flash_btn = QPushButton("⚡ FLASH"); self.flash_btn.clicked.connect(self._flash); arow.addWidget(self.flash_btn)
+        self.flash_btn.setToolTip("Write the selected firmware to the board over USB. Don't unplug while it runs.")
         eb = QPushButton("Erase flash"); eb.clicked.connect(self._erase); arow.addWidget(eb)
+        eb.setToolTip("Wipe the board's entire flash. Use before a full flash, or to recover a bad install.")
         arow.addStretch()
-        lay.addLayout(arow)
+        lay.addWidget(self.arow_w)
 
         self.console = QPlainTextEdit(); self.console.setReadOnly(True); lay.addWidget(self.console)
+        self.console.setToolTip("Live esptool output for the current detect / flash / erase operation.")
+
+        # Apply the initial profile-dependent visibility (default = marauder: all rows shown,
+        # suicide checkbox visible). This is a no-op for the Marauder default beyond confirming
+        # the as-designed layout.
+        self._apply_profile_ui()
 
         self.timer = QTimer(self); self.timer.timeout.connect(self._drain); self.timer.start(40)
         if not flasher.esptool_available():
@@ -328,9 +441,10 @@ class FlasherDialog(QDialog):
         self._work(job)
 
     def _load(self):
+        profile = self.profile          # captured on the GUI thread
         def job():
-            self._log("[*] fetching latest release...")
-            tag, self.assets = flasher.latest_release()
+            self._log(f"[*] fetching latest release for {profile.label}...")
+            tag, self.assets = profile.latest_release()
             self._log(f"[i] {tag}: {len(self.assets)} variants")
             self._need_refill = True
         self._work(job)
@@ -339,10 +453,10 @@ class FlasherDialog(QDialog):
         if not self.assets:
             return
         items = self.assets if (self.showall.isChecked() or not self.chip) \
-            else flasher.variants_for_chip(self.assets, self.chip)
+            else self.profile.variants_for_chip(self.assets, self.chip)
         self.by_name = {f"{a['label']}  [{a['name']}]": a for a in items}
         self.variant.clear(); self.variant.addItems(list(self.by_name))
-        d = flasher.default_variant(items, self.chip) if self.chip else None
+        d = self.profile.default_variant(items, self.chip) if self.chip else None
         if d:
             for i, (lbl, a) in enumerate(self.by_name.items()):
                 if a["name"] == d["name"]:
@@ -352,6 +466,86 @@ class FlasherDialog(QDialog):
         path, _ = QFileDialog.getOpenFileName(self, "Select .bin", "", "Firmware (*.bin);;All (*)")
         if path:
             self.local.setText(path); self.src_local.setChecked(True)
+
+    # --- firmware-profile selection (additive; marauder is the default) ----- #
+    def _on_profile_changed(self, idx):
+        """Re-target detect/release-list/variant logic at the selected firmware profile.
+
+        Marauder (the default) keeps every existing row and the suicide option. Other
+        profiles hide the suicide checkbox; the 'custom' local-only profile additionally
+        hides the download/release rows and just uses the local .bin path."""
+        if idx < 0 or idx >= len(self._profiles):
+            return
+        pid = self._profiles[idx][0]
+        self.profile = flasher.get_profile(pid)
+        # Switching firmware invalidates the previously loaded release list/variants.
+        self.assets = []
+        self.by_name = {}
+        self.variant.clear()
+        self._apply_profile_ui()
+
+    def _apply_profile_ui(self):
+        """Show/hide profile-dependent widgets. Called on profile change and after the
+        suicide toggle so the two stay consistent. Never touches the Marauder defaults."""
+        supports_suicide = self.profile.supports_suicide
+        is_custom = (self.profile.id == "custom")
+        # The suicide checkbox is only meaningful for Marauder; hide+disable it otherwise so
+        # it can't be ticked for ESP32-DIV / Bruce / custom.
+        if not supports_suicide and self.suicide_cb.isChecked():
+            self.suicide_cb.setChecked(False)   # also fires _toggle_suicide -> hides the panel
+        self.suicide_cb.setVisible(supports_suicide)
+        self.suicide_cb.setEnabled(supports_suicide)
+        in_suicide = supports_suicide and self.suicide_cb.isChecked()
+        # When NOT in suicide mode, the normal rows are visible — except 'custom' hides the
+        # remote download/release rows (it flashes a local .bin only).
+        self.mode_row_w.setVisible(not in_suicide)
+        self.src_row_w.setVisible(not in_suicide and not is_custom)
+        self.dl_row_w.setVisible(not in_suicide and not is_custom)
+        # custom is local-only: keep the local-path row visible and force the local source.
+        self.local_row_w.setVisible(not in_suicide)
+        if is_custom:
+            self.src_local.setChecked(True)
+
+    # --- suicide-build path (opt-in; default/core path is untouched) -------- #
+    def _toggle_suicide(self):
+        """Reveal the bundle sub-panel and hide the normal mode/source/variant rows
+        when 'Suicide build' is checked. Unchecked == the dialog behaves exactly as today."""
+        on = self.suicide_cb.isChecked()
+        self.suicide_panel.setVisible(on)
+        # Row visibility (mode/source/download/local) is owned by _apply_profile_ui so the
+        # suicide toggle and the firmware-profile selection stay consistent.
+        self._apply_profile_ui()
+
+    def _browse_bundle(self):
+        d = QFileDialog.getExistingDirectory(self, "Select bundle folder", self.bundle_dir.text().strip())
+        if d:
+            self.bundle_dir.setText(d)
+
+    def _bundle_changed(self):
+        """Parse bundle.json (if present) and show a read-only manifest summary."""
+        path = self.bundle_dir.text().strip()
+        if not path:
+            self.bundle_summary.setText("No bundle loaded.")
+            return
+        try:
+            m = flasher.read_bundle_manifest(path)
+        except Exception as e:
+            self.bundle_summary.setText(f"⚠ {e}")
+            return
+        variant = m.get("variant") or m.get("name") or "?"
+        chip = m.get("chip") or "?"
+        count = len(m.get("files", []))
+        self.bundle_summary.setText(
+            f"variant: {variant}    chip: {chip}    files: {count}")
+
+    def _t2_info(self):
+        """The T2 box is purely informational — it never burns eFuses or flashes anything."""
+        if self.t2_cb.isChecked():
+            QMessageBox.information(
+                self, "T2: Flash Encryption + Secure Boot",
+                "Flash Encryption + Secure Boot is an IRREVERSIBLE eFuse operation.\n\n"
+                "It is provisioned by the Suicide-Marauder repo, NOT flashed here. This app "
+                "never burns eFuses — this checkbox only shows this notice.")
 
     def _resolve_chip(self, port):
         if self.chip:
@@ -364,6 +558,10 @@ class FlasherDialog(QDialog):
         port = self.port.text().strip()
         if not port:
             return
+        # opt-in suicide-bundle path: validate bundle + manifest, confirm, then flash_suicide().
+        if self.suicide_cb.isChecked():
+            self._flash_suicide(port)
+            return
         mode = "app" if self.mode_app.isChecked() else "full"
         if self.src_dl.isChecked() and not self.by_name:
             QMessageBox.information(self, "Firmware", "Load release list + pick a variant."); return
@@ -373,7 +571,10 @@ class FlasherDialog(QDialog):
             return
         # capture all widget values on the GUI thread BEFORE starting the worker
         baud = int(self.baud.currentText())
-        use_download = self.src_dl.isChecked()
+        profile = self.profile
+        is_marauder = (profile.id == "marauder")
+        # 'custom' is local-only and the source row is hidden, so always use the local path.
+        use_download = self.src_dl.isChecked() and profile.id != "custom"
         asset = self.by_name.get(self.variant.currentText()) if use_download else None
         local = self.local.text().strip()
         self._free()
@@ -383,16 +584,60 @@ class FlasherDialog(QDialog):
             if not chip:
                 self._log("[error] chip unknown"); return
             cache = flasher.cache_dir()
+            app_offset = None
             if use_download:
                 if not asset:
                     self._log("[error] no variant selected"); return
                 if asset["chip"] != chip:
                     self._log(f"[!] variant is {asset['chip']} but chip is {chip}")
                 app = flasher.download_to(asset["url"], os.path.join(cache, asset["name"]), self._log)
+                # some profiles (ESP32-DIV/Bruce) pin an explicit per-asset offset
+                app_offset = asset.get("offset")
             else:
                 app = local
-            support = flasher.support_files(chip, cache, self._log) if mode == "full" else None
-            rc = flasher.flash(port, chip, app, self._log, mode=mode, baud=baud, support=support)
+            if is_marauder:
+                # Marauder default flow — unchanged, byte-for-byte (back-compat wrappers).
+                support = flasher.support_files(chip, cache, self._log) if mode == "full" else None
+                rc = flasher.flash(port, chip, app, self._log, mode=mode, baud=baud, support=support)
+            else:
+                support = profile.support_files(chip, cache, self._log) if mode == "full" else None
+                rc = profile.flash_assets(port, chip, app, self._log, mode=mode, baud=baud,
+                                          support=support, app_offset=app_offset)
+            self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
+        self._work(job)
+
+    def _flash_suicide(self, port):
+        """Flash a pre-provisioned Suicide-Marauder bundle (opt-in path).
+
+        Validates the bundle dir + manifest on the GUI thread, names the board in a
+        confirmation, then routes to flasher.flash_suicide() on the worker thread. This
+        only FLASHES an already-provisioned bundle; it never burns eFuses (see flasher.py)."""
+        bundle_dir = self.bundle_dir.text().strip()
+        if not bundle_dir:
+            QMessageBox.information(self, "Bundle", "Pick a bundle folder (the one with bundle.json).")
+            return
+        try:
+            manifest = flasher.read_bundle_manifest(bundle_dir)
+        except Exception as e:
+            QMessageBox.warning(self, "Bundle", f"Can't read bundle.json:\n{e}")
+            return
+        board = manifest.get("variant") or manifest.get("name") or manifest.get("board") or "?"
+        man_chip = manifest.get("chip") or "?"
+        if QMessageBox.question(
+                self, "Confirm suicide-build flash",
+                f"Flash anti-forensic bundle to board '{board}' ({man_chip}) via {port}?\n\n"
+                f"This is an opt-in self-wipe-capable build. Test in SAFE_MODE first.\n"
+                f"Don't unplug while flashing.") != QMessageBox.Yes:
+            return
+        # capture widget values on the GUI thread before the worker starts
+        baud = int(self.baud.currentText())
+        self._free()
+
+        def job():
+            chip = self._resolve_chip(port)
+            if not chip:
+                self._log("[error] chip unknown"); return
+            rc = flasher.flash_suicide(port, chip, bundle_dir, self._log, baud=baud)
             self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
         self._work(job)
 
@@ -451,18 +696,27 @@ class MainWindow(QMainWindow):
         bar = QHBoxLayout()
         bar.addWidget(QLabel("Port:"))
         self.port = QComboBox(); self.port.setEditable(True); self.port.setMinimumWidth(220)
+        self.port.setToolTip("Serial port the Marauder is on (e.g. COM5 or /dev/ttyUSB0). "
+                             "Pick from the list or type it; press ↻ to rescan.")
         self._refresh_ports(); bar.addWidget(self.port)
         rb = QPushButton("↻"); rb.setFixedWidth(32); rb.clicked.connect(self._refresh_ports); bar.addWidget(rb)
+        rb.setToolTip("Rescan for serial ports (F5).")
         self.connect_btn = QPushButton("Connect"); self.connect_btn.clicked.connect(self._toggle); bar.addWidget(self.connect_btn)
+        self.connect_btn.setToolTip("Open (or close) the serial session to the selected port.")
         self.status = QLabel("disconnected"); self.status.setObjectName("status_bad"); bar.addWidget(self.status)
+        self.status.setToolTip("Connection state: shows the connected port, or 'disconnected'.")
         self.autolist_cb = QCheckBox("Auto-list"); self.autolist_cb.setChecked(True)
         self.autolist_cb.setToolTip("While scanning, auto-pull 'list -a' so the tables fill themselves")
         bar.addWidget(self.autolist_cb)
         self.log_btn = QPushButton("● Log: off"); self.log_btn.setCheckable(True)
         self.log_btn.clicked.connect(self._toggle_log); bar.addWidget(self.log_btn)
+        self.log_btn.setToolTip("Toggle capture logging: write the serial stream and periodic "
+                                "AP/Station snapshots to the log folder.")
         bar.addStretch()
         fb = QPushButton("⚡ Flash Firmware"); fb.clicked.connect(self._flasher); bar.addWidget(fb)
+        fb.setToolTip("Open the firmware flasher: download or pick a build and write it to the board.")
         sb = QPushButton("STOP"); sb.setObjectName("stop"); sb.clicked.connect(self._stop); bar.addWidget(sb)
+        sb.setToolTip("Send 'stopscan' and halt auto-listing (Ctrl+.). Stops the current attack/scan.")
         root.addLayout(bar)
         self.setStatusBar(QStatusBar())
 
@@ -474,21 +728,45 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.console = QPlainTextEdit(); self.console.setReadOnly(True)
         self.console.setFont(QFont("monospace", 10))
-        self.tabs.addTab(self.console, "Console")
+        self.console.setToolTip("Live serial output from the board.")
+        ci = self.tabs.addTab(self.console, "Console")
+        self.tabs.setTabToolTip(ci, "Live serial output from the board.")
         self.ap_table = self._make_table(["#", "SSID", "Ch", "RSSI", "BSSID"])
-        self.tabs.addTab(self.ap_table, "Access Points")
+        self.ap_table.setToolTip("Access points parsed from the live scan. # is the index used by 'select -a'.")
+        for col, tip in enumerate(["Index used by 'select -a'", "Network name (SSID)",
+                                   "Wi-Fi channel", "Signal strength (RSSI, dBm)",
+                                   GLOSSARY.get("bssid", "Access-point MAC address")]):
+            it = self.ap_table.horizontalHeaderItem(col)
+            if it is not None:
+                it.setToolTip(tip)
+        ai = self.tabs.addTab(self.ap_table, "Access Points")
+        self.tabs.setTabToolTip(ai, "Access points seen by the last scan (fills while scanning).")
         self.sta_table = self._make_table(["#", "Station MAC", "AP", "RSSI"])
-        self.tabs.addTab(self.sta_table, "Stations")
+        self.sta_table.setToolTip("Client devices (stations) parsed from the scan. "
+                                  "# is the index used by 'select -c'.")
+        for col, tip in enumerate(["Index used by 'select -c'",
+                                   GLOSSARY.get("station", "Client device MAC address"),
+                                   "BSSID of the AP it is associated with", "Signal strength (RSSI, dBm)"]):
+            it = self.sta_table.horizontalHeaderItem(col)
+            if it is not None:
+                it.setToolTip(tip)
+        si = self.tabs.addTab(self.sta_table, "Stations")
+        self.tabs.setTabToolTip(si, "Client devices seen by the last station scan.")
         self.guide = QTextBrowser(); self.guide.setOpenExternalLinks(True)
+        self.guide.setToolTip("The bundled GUIDE.md, rendered. Press F1 to jump here.")
         self._load_guide()
-        self.tabs.addTab(self.guide, "Guide")
+        gi = self.tabs.addTab(self.guide, "Guide")
+        self.tabs.setTabToolTip(gi, "Usage guide (GUIDE.md).")
         rl.addWidget(self.tabs, 1)
 
         raw = QHBoxLayout()
         self.raw = QLineEdit(); self.raw.setPlaceholderText("raw command (e.g. scanap) — Enter to send")
+        self.raw.setToolTip("Type any Marauder command and press Enter to send it (Ctrl+K to focus here).")
         self.raw.returnPressed.connect(self._send_raw); raw.addWidget(self.raw)
         snd = QPushButton("Send"); snd.clicked.connect(self._send_raw); raw.addWidget(snd)
+        snd.setToolTip("Send the typed command to the board.")
         clr = QPushButton("Clear"); clr.clicked.connect(lambda: (self.console.clear(), self.parser.clear())); raw.addWidget(clr)
+        clr.setToolTip("Clear the console and the parsed AP/Station tables (Ctrl+L).")
         rl.addLayout(raw)
         split.addWidget(right)
         split.setSizes([430, 750])
@@ -653,17 +931,41 @@ class MainWindow(QMainWindow):
     def _build_menu(self):
         m = self.menuBar()
         filem = m.addMenu("&File")
-        act = QAction("Set Log Folder…", self); act.triggered.connect(self._set_log_folder); filem.addAction(act)
-        act = QAction("Open Log Folder", self); act.triggered.connect(self._open_log_folder); filem.addAction(act)
+        act = QAction("Set Log Folder…", self); act.triggered.connect(self._set_log_folder)
+        act.setToolTip("Choose where capture logs and snapshots are written.")
+        act.setStatusTip("Choose where capture logs and snapshots are written.")
+        filem.addAction(act)
+        act = QAction("Open Log Folder", self); act.triggered.connect(self._open_log_folder)
+        act.setToolTip("Open the current log folder in your file manager.")
+        act.setStatusTip("Open the current log folder in your file manager.")
+        filem.addAction(act)
         filem.addSeparator()
-        act = QAction("Quit", self); act.setShortcut(QKeySequence("Ctrl+Q")); act.triggered.connect(self.close); filem.addAction(act)
+        act = QAction("Quit", self); act.setShortcut(QKeySequence("Ctrl+Q")); act.triggered.connect(self.close)
+        act.setToolTip("Close the app (Ctrl+Q). Disconnects the serial session first.")
+        act.setStatusTip("Close the app (Ctrl+Q).")
+        filem.addAction(act)
         toolsm = m.addMenu("&Tools")
-        act = QAction("Flash Firmware…", self); act.triggered.connect(self._flasher); toolsm.addAction(act)
-        act = QAction("Refresh Ports", self); act.setShortcut(QKeySequence("F5")); act.triggered.connect(self._refresh_ports); toolsm.addAction(act)
+        act = QAction("Flash Firmware…", self); act.triggered.connect(self._flasher)
+        act.setToolTip("Open the firmware flasher (download/local/suicide-bundle).")
+        act.setStatusTip("Open the firmware flasher.")
+        toolsm.addAction(act)
+        act = QAction("Refresh Ports", self); act.setShortcut(QKeySequence("F5")); act.triggered.connect(self._refresh_ports)
+        act.setToolTip("Rescan for connected serial ports (F5).")
+        act.setStatusTip("Rescan for connected serial ports (F5).")
+        toolsm.addAction(act)
         helpm = m.addMenu("&Help")
-        act = QAction("Guide", self); act.setShortcut(QKeySequence("F1")); act.triggered.connect(self._show_guide); helpm.addAction(act)
-        act = QAction("Check for Updates…", self); act.triggered.connect(self._check_updates); helpm.addAction(act)
-        act = QAction("About", self); act.triggered.connect(self._about); helpm.addAction(act)
+        act = QAction("Guide", self); act.setShortcut(QKeySequence("F1")); act.triggered.connect(self._show_guide)
+        act.setToolTip("Open the Guide tab (F1).")
+        act.setStatusTip("Open the Guide tab (F1).")
+        helpm.addAction(act)
+        act = QAction("Check for Updates…", self); act.triggered.connect(self._check_updates)
+        act.setToolTip("Pull the latest app version from git (Ctrl+U).")
+        act.setStatusTip("Pull the latest app version from git (Ctrl+U).")
+        helpm.addAction(act)
+        act = QAction("About", self); act.triggered.connect(self._about)
+        act.setToolTip("Version, revision and project link.")
+        act.setStatusTip("Version, revision and project link.")
+        helpm.addAction(act)
 
     def _build_shortcuts(self):
         QShortcut(QKeySequence("Ctrl+L"), self, activated=self._clear)

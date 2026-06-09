@@ -24,6 +24,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from marauder_core import MarauderController, CaptureLogger, commands
+from marauder_core.uihelp import Tooltip
 
 # Dark theme colors
 BG = "#0b0f0a"
@@ -81,19 +82,24 @@ class ParamDialog(tk.Toplevel):
         for p in cmd.params:
             label = p.name + (" *" if p.required else "")
             tk.Label(self, text=label, bg=PANEL, fg=FG).grid(row=r, column=0, sticky="e", padx=(10, 6), pady=4)
+            ptip = (p.help or (f"e.g. {p.placeholder}" if p.placeholder else "")) \
+                + ("\n(required)" if p.required else "")
             if p.kind == "bool":
                 var = tk.BooleanVar(value=False)
-                ttk.Checkbutton(self, variable=var).grid(row=r, column=1, sticky="w", padx=(0, 10))
+                w = ttk.Checkbutton(self, variable=var)
+                w.grid(row=r, column=1, sticky="w", padx=(0, 10))
             elif p.kind == "select":
                 var = tk.StringVar(value=p.choices[0] if p.choices else "")
-                ttk.Combobox(self, textvariable=var, values=p.choices, state="readonly",
-                             width=24).grid(row=r, column=1, sticky="w", padx=(0, 10))
+                w = ttk.Combobox(self, textvariable=var, values=p.choices, state="readonly",
+                                 width=24)
+                w.grid(row=r, column=1, sticky="w", padx=(0, 10))
             else:
                 var = tk.StringVar()
-                ent = ttk.Entry(self, textvariable=var, width=26)
-                ent.grid(row=r, column=1, sticky="w", padx=(0, 10))
+                w = ttk.Entry(self, textvariable=var, width=26)
+                w.grid(row=r, column=1, sticky="w", padx=(0, 10))
                 if p.placeholder:
-                    ent.insert(0, "")
+                    w.insert(0, "")
+            Tooltip(w, ptip.strip())
             self._vars[p.name] = var
             if p.help or p.placeholder:
                 hint = p.help or f"e.g. {p.placeholder}"
@@ -105,8 +111,14 @@ class ParamDialog(tk.Toplevel):
         btns = tk.Frame(self, bg=PANEL)
         btns.grid(row=r, column=0, columnspan=2, pady=10)
         runtext = "RUN ⚠" if cmd.danger else "Run"
-        ttk.Button(btns, text=runtext, command=self._ok).pack(side="left", padx=6)
-        ttk.Button(btns, text="Cancel", command=self.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(btns, text=runtext, command=self._ok)
+        run_btn.pack(side="left", padx=6)
+        Tooltip(run_btn, ("Build and send this command with the values above.\n"
+                          "(attack/spam — authorized targets only)" if cmd.danger
+                          else "Build and send this command with the values above."))
+        cancel_btn = ttk.Button(btns, text="Cancel", command=self.destroy)
+        cancel_btn.pack(side="left", padx=6)
+        Tooltip(cancel_btn, "Close this dialog without sending anything.")
 
         self.transient(master)
         self.grab_set()
@@ -170,17 +182,27 @@ class MarauderGUI(tk.Tk):
         self.port_var = tk.StringVar()
         self.port_combo = ttk.Combobox(bar, textvariable=self.port_var, width=28, state="normal")
         self.port_combo.pack(side="left", pady=8)
-        ttk.Button(bar, text="↻", width=3, command=self._refresh_ports).pack(side="left", padx=4)
+        Tooltip(self.port_combo, "Serial port the Marauder board is on "
+                "(e.g. /dev/ttyUSB0 or COM5). Pick one or type it; ↻ refreshes the list.")
+        refresh_btn = ttk.Button(bar, text="↻", width=3, command=self._refresh_ports)
+        refresh_btn.pack(side="left", padx=4)
+        Tooltip(refresh_btn, "Re-scan for connected serial ports.")
         self.connect_btn = ttk.Button(bar, text="Connect", command=self._toggle_connect)
         self.connect_btn.pack(side="left", padx=6)
+        Tooltip(self.connect_btn, "Open (or close) the live serial session to the selected "
+                "port so you can send commands and watch the console.")
 
         self.status = tk.Label(bar, text="disconnected", bg=PANEL, fg=DANGER)
         self.status.pack(side="left", padx=10)
 
-        ttk.Button(bar, text="STOP", style="Stop.TButton",
-                   command=self._stop).pack(side="right", padx=10, pady=6)
-        ttk.Button(bar, text="⚡ Flash Firmware",
-                   command=self._open_flasher).pack(side="right", padx=4, pady=6)
+        stop_btn = ttk.Button(bar, text="STOP", style="Stop.TButton", command=self._stop)
+        stop_btn.pack(side="right", padx=10, pady=6)
+        Tooltip(stop_btn, "Send the Marauder 'stop' command to halt any running "
+                "scan/attack immediately.")
+        flash_btn = ttk.Button(bar, text="⚡ Flash Firmware", command=self._open_flasher)
+        flash_btn.pack(side="right", padx=4, pady=6)
+        Tooltip(flash_btn, "Open the firmware flasher: detect the chip, download or pick "
+                "a .bin, and flash the board (also hosts the opt-in suicide-bundle path).")
         self._refresh_ports()
 
     def _open_flasher(self):
@@ -222,8 +244,14 @@ class MarauderGUI(tk.Tk):
         raw = ttk.Entry(rawbar, textvariable=self.raw_var)
         raw.pack(side="left", fill="x", expand=True)
         raw.bind("<Return>", lambda e: self._send_raw())
-        ttk.Button(rawbar, text="Send", command=self._send_raw).pack(side="left", padx=4)
-        ttk.Button(rawbar, text="Clear", command=self._clear_console).pack(side="left")
+        Tooltip(raw, "Type any raw Marauder serial command and press Enter (or Send) "
+                "to transmit it verbatim.")
+        send_btn = ttk.Button(rawbar, text="Send", command=self._send_raw)
+        send_btn.pack(side="left", padx=4)
+        Tooltip(send_btn, "Send the typed raw command to the board.")
+        clear_btn = ttk.Button(rawbar, text="Clear", command=self._clear_console)
+        clear_btn.pack(side="left")
+        Tooltip(clear_btn, "Clear the console output (does not affect the board or any log file).")
         paned.add(right)
 
     def _build_command_buttons(self, parent):
@@ -238,7 +266,7 @@ class MarauderGUI(tk.Tk):
                                  style="Danger.TButton" if c.danger else "TButton",
                                  command=lambda cmd=c: self._run_command(cmd))
                 tip = c.desc + ("\n(attack — authorized only)" if c.danger else "") + f"\nsends: {c.base}"
-                _Tooltip(btn, tip)
+                Tooltip(btn, tip)
                 btn.grid(row=row, column=col, padx=3, pady=3, sticky="w")
                 col += 1
                 if col >= 2:

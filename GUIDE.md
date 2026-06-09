@@ -131,6 +131,22 @@ The classic chain. Deauth forces clients to re-handshake, you capture it, crack 
 ### C. Evil Portal credential capture
 
 1. Put your `index.html` (and optional `ap.config.txt`) on the SD card.
+2. **Scan APs** → **Select APs** (the AP to impersonate).
+3. **Evil Portal** (`evilportal -c start`) — enable EPDeauth in settings to deauth the real AP so
+   clients land on yours. Captured credentials are written to the SD card.
+
+### D. Wardriving → map it on WiGLE
+1. Plug in a GPS module (NMEA over serial, or shared via `gpsd`).
+2. **Wardrive** (`wardrive`) while moving — writes a **WiGLE-format CSV** (`wardrive_*.csv`) to SD.
+3. Upload that CSV to **wigle.net** (counts toward your stats / builds a coverage map).
+
+### E. Find who's following you (BLE)
+1. **Sniff Bluetooth** `sniffbt -t airtag` to surface trackers; `-t flock` for Flock cameras.
+2. **MAC Track** a suspicious MAC to gauge proximity as you move.
+3. Correlate sightings over time/location with a tool like **Chasing Your Tail NG**.
+
+### F. Probe-sniff → Karma lure
+1. **Sniff Probes** to learn which SSIDs nearby devices are searching for.
 2. **Scan APs** → **Select APs** (the AP you're impersonating).
 3. **Evil Portal** (`evilportal -c start`) — turn on EPDeauth in settings to knock clients off the real AP so they land on yours. Creds get saved to SD.
 
@@ -176,6 +192,13 @@ PCAP, evil portal captures, and wardrive CSVs live on the board's SD card (use `
 
 ## 6. Works with
 
+- **Your own dashboard** — `marauder_core` is importable; build a dashboard on it to show Marauder
+  beside other tools (Kismet/Meshtastic/GPS).
+- **Kismet** — run Kismet on the Pi for deep WiFi mapping while Marauder does active attacks; both
+  can share the **same GPS** via `gpsd` (`localhost:2947`).
+- **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking (chain A).
+- **WiGLE** — wardrive CSVs (chain D).
+- **Flipper Zero** — pair sub-GHz/RFID/NFC/IR work (Flipper) with WiFi/BLE (this) for full coverage.
 - **The cyberdeck** — `marauder_core` is importable; the deck's dashboard reuses it alongside Kismet, Meshtastic, and GPS.
 - **Kismet** — run it on the Pi for passive WiFi mapping while Marauder handles active attacks. Both can share GPS via `gpsd`.
 - **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking.
@@ -186,10 +209,93 @@ PCAP, evil portal captures, and wardrive CSVs live on the board's SD card (use `
 
 ## 7. Flashing
 
+⚡ **Flash Firmware** → pick the **Firmware** → **Detect chip** → **Load release list** → pick a variant →
+**Update app only** (existing board) or **Full flash** (blank board). Uses `esptool` with
+`--flash_size detect`. Classic ESP32 Gold → a non-S3 variant (e.g. *old_hardware*); S3 → *MultiBoard S3*.
 ⚡ **Flash Firmware** → **Detect chip** → **Load release list** → pick a variant → **Update app only** or **Full flash**. Uses `esptool` with `--flash_size detect`. Classic ESP32 (Gold) → a non-S3 variant (usually *old_hardware*); S3 → *MultiBoard S3*.
+
+### Firmware types (the Firmware selector)
+
+The flasher reuses one esptool pipeline for several firmwares. Pick from the **Firmware** dropdown:
+
+| Firmware | What it is | How it flashes | Suicide build? |
+|---|---|---|---|
+| **ESP32 Marauder** *(default)* | The full native control app this tool is built around — live tables, target picker, every command (everything in §1–§6 above). | Pulls the right variant from the official Marauder GitHub release and flashes at the correct offsets. | **Yes — Marauder only** (§8). |
+| **ESP32-DIV** ([cifertech/esp32-div](https://github.com/cifertech/esp32-div)) | A separate standalone ESP32 firmware. **Flash-only here** — once it's on the board it runs on its own; this app has no native control panel for it. | Fetches the official ESP32-DIV image and its boot chain and flashes them byte-for-byte. | No. |
+| **Custom / local `.bin`** | Any other ESP32 firmware you have a `.bin` for. | You point the flasher at a local `.bin`; it flashes with chip-appropriate default offsets. Nothing is downloaded. | No. |
+
+> **ESP32-DIV jamming features are illegal to operate and are NOT part of this tool.** ESP32-DIV
+> ships RF-jamming functionality that is illegal to use in most jurisdictions (e.g. FCC rules).
+> This tool only **flashes** the official ESP32-DIV image — it adds, enables, and controls **none**
+> of that. What the firmware does after it's flashed is entirely your responsibility (see [Legal](#legal)).
+
+> The **Firmware** selector is purely additive: leave it on **ESP32 Marauder** (the default) and the
+> entire app — control panel, tables, attacks, logging, and the Suicide path — behaves exactly as
+> documented in this guide.
+
+> **Tooltips:** every flasher control — including the **Firmware** selector, the **Suicide** checkbox
+> and its bundle-dir field — has a hover tooltip explaining what it does.
+
+---
+
+## 8. Suicide build & flashing it (anti-forensic, opt-in)
+
+This is an **optional, owner-only, defensive** layer that **applies to the ESP32 Marauder firmware
+only** — it has no meaning for ESP32-DIV or Custom firmware. With the **Firmware** selector on
+ESP32 Marauder (the default), plain Marauder is still the default; the suicide path is gated behind
+a single **Suicide** checkbox and changes nothing unless you tick it.
+
+### What it is
+A hardened Marauder variant that can **wipe its own secrets** so a lost or seized board protects
+the data on it. The provisioned bundle bakes in:
+- a **boot password** gate (the board won't come up without it),
+- a **2-fail wipe** (too many wrong password attempts triggers the configured wipe),
+- a **GPIO dead-man** trigger (a pin/check-in the owner controls; if it's tripped/stops, the
+  protective action runs).
+
+This app does **not** build, configure, hash, or arm any of that. It only **flashes** an image
+that was already provisioned elsewhere.
+
+### Where it's built: the Suicide-Marauder repo
+You build and provision the bundle in the **separate private repo
+[LxveAce/Suicide-Marauder](https://github.com/LxveAce/Suicide-Marauder)** (its `host/` provisioner).
+That repo does all the sensitive work — password hashing, guard configuration, and any eFuse /
+flash-encryption (T2) burning. The provisioner emits a **bundle**: a directory holding a
+`bundle.json` manifest plus the firmware `.bin` images and their flash offsets.
+
+> Read the Suicide-Marauder repo's **SAFETY.md** first, and don't let this guide contradict it —
+> the provisioning repo is the source of truth for how the protections behave and how to arm them.
+
+### Flashing the bundle from here
+1. Build + provision the bundle in the Suicide-Marauder repo (follow its README/SAFETY.md).
+2. In the flasher, tick the **Suicide** checkbox and point its field at the **bundle directory**
+   (the folder containing `bundle.json` and the `.bin` files).
+3. **Detect chip** — the manifest names the chip it was built for; the flasher warns if it
+   disagrees with the detected chip (a mismatch will likely fail or brick the board).
+4. **FLASH** — it writes every offset/image pair from the manifest in one
+   `write_flash -z --flash_size detect`. No eFuses are burned here; no T2 is performed here.
+
+### Safety
+- **Test `SUICIDE_SAFE_MODE` first.** Provision and run the bundle in the Suicide-Marauder repo's
+  safe mode before any live build, so you can confirm the password gate and triggers behave as
+  expected **without** performing a destructive wipe. Validate the whole flow in safe mode, then
+  graduate to the real build.
+- **T2 / flash encryption is irreversible.** If the bundle was provisioned to burn T2
+  (flash-encryption eFuses), that is a **one-way, permanent** change to the chip — it cannot be
+  undone. Be certain before flashing such a bundle.
+- This is for **your own** hardware only, as a duress/loss/seizure safeguard — not an attack tool.
 
 ---
 
 ## Legal
 
+For **authorized security testing only** — networks/devices you own or have **written permission**
+to test. Deauth, evil-portal, beacon/BLE spam, and karma can be illegal against others (US CFAA,
+FCC rules, and equivalents). Many modern networks ignore deauth (802.11w/PMF). You are responsible
+for your use. See the firmware's own [legal notes](https://github.com/justcallmekoko/ESP32Marauder).
+
+**ESP32-DIV (optional flash target):** its RF-**jamming** features are **illegal to operate** in
+most jurisdictions (e.g. FCC rules) and are **NOT part of this tool** — this app only *flashes* the
+official ESP32-DIV image and neither enables nor controls any such feature. What that firmware does
+once it's on the board is entirely your responsibility.
 **Authorized testing only** — networks and devices you own or have written permission to test. Deauth, evil portals, beacon/BLE spam, and karma can be illegal against other people's stuff. Many modern networks ignore deauth anyway (802.11w/PMF). You are responsible for what you do. See the firmware's own [legal notes](https://github.com/justcallmekoko/ESP32Marauder).
