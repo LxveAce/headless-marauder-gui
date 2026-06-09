@@ -347,18 +347,18 @@ One command catalog and one parser feed all four front-ends. The serial layer st
 
 ---
 
-## Roadmap: Universal Flasher
+## Universal Flasher
 
-This tool's pluggable `FirmwareProfile` architecture is the foundation for a planned **universal multi-device flasher** that will support 10+ firmware types across 4 flash backends:
+This tool's pluggable `FirmwareProfile` architecture was expanded into the **[Universal Flasher](https://github.com/LxveAce/universal-flasher)** — a multi-firmware flasher and device manager supporting 14+ firmware types across 4 flash backends:
 
 | Flash Backend | Devices |
 |---------------|---------|
-| **esptool** | ESP32 Marauder, GhostESP, Bruce, HaleHound, ESP32-DIV, Meshtastic, Flock-You, OUI-Spy |
-| **SD image writer** | Pwnagotchi (Pi Zero 2W), RaspyJack (Pi Zero 2W) |
+| **esptool** | Marauder, GhostESP, Bruce, HaleHound, ESP32-DIV, Meshtastic, Flock-You, OUI-Spy, Sky-Spy, AirTag Scanner, CYT-NG |
+| **SD image writer** | Pwnagotchi, RaspyJack, Kali ARM |
 | **ADB** | RayHunter (Orbic RC400L) |
 | **qFlipper** | Flipper Zero (Momentum, Unleashed) |
 
-Adding a new firmware requires a ~100-line `FirmwareProfile` subclass and a registration call — zero UI changes. The universal flasher will ship as a separate repo built on this codebase. See [UNIVERSAL-FLASHER.md](https://github.com/LxveAce/Projects/blob/main/projects/14-cyberdeck/UNIVERSAL-FLASHER.md) for the full architecture document.
+Also includes batch flash, firmware backup/restore, device auto-detection, offline cache, flash history, update checker, health check, and a plugin system. **[github.com/LxveAce/universal-flasher](https://github.com/LxveAce/universal-flasher)**
 
 ---
 
