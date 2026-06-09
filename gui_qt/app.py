@@ -42,6 +42,37 @@ _AP_SCANS = {"scanap", "scanall"}
 _STA_SCANS = {"scansta"}
 
 
+def _clean_manifest_field(value, max_len: int = 64) -> str:
+    """Sanitize an operator-facing string pulled from a (possibly tampered) bundle.json.
+
+    A bundle.json is untrusted data: a hostile variant/name/board/chip could embed control
+    characters, newlines, or megabytes of text to spoof or disrupt the suicide confirmation
+    dialog (e.g. fake a benign board name, push the real warning off-screen). We coerce to str,
+    strip C0/C1/DEL control chars, collapse runs of whitespace, and length-cap with an ellipsis
+    so the confirm dialog always shows a short, honest label. Empty/None becomes "?".
+    """
+    if value is None:
+        return "?"
+    s = str(value)
+    # Drop C0 (<0x20), C1 (0x80-0x9f) and DEL (0x7f) control chars; turn any whitespace
+    # (incl. newlines/tabs) into a single space, keep other printable text as-is.
+    out = []
+    for ch in s:
+        o = ord(ch)
+        if ch.isspace():
+            out.append(" ")
+        elif o < 0x20 or o == 0x7f or 0x80 <= o <= 0x9f:
+            continue
+        else:
+            out.append(ch)
+    cleaned = " ".join("".join(out).split())   # collapse whitespace runs, strip ends
+    if not cleaned:
+        return "?"
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len - 1] + "…"
+    return cleaned
+
+
 def _cmd_tooltip(c) -> str:
     """Hover text for a command button: what it does + key behaviour flags."""
     tip = c.desc or c.label
@@ -532,8 +563,9 @@ class FlasherDialog(QDialog):
         except Exception as e:
             self.bundle_summary.setText(f"⚠ {e}")
             return
-        variant = m.get("variant") or m.get("name") or "?"
-        chip = m.get("chip") or "?"
+        # Same sanitization as the confirm dialog: a tampered bundle.json can't spoof this summary.
+        variant = _clean_manifest_field(m.get("variant") or m.get("name"))
+        chip = _clean_manifest_field(m.get("chip"), max_len=24)
         count = len(m.get("files", []))
         self.bundle_summary.setText(
             f"variant: {variant}    chip: {chip}    files: {count}")
@@ -590,7 +622,7 @@ class FlasherDialog(QDialog):
                     self._log("[error] no variant selected"); return
                 if asset["chip"] != chip:
                     self._log(f"[!] variant is {asset['chip']} but chip is {chip}")
-                app = flasher.download_to(asset["url"], os.path.join(cache, asset["name"]), self._log)
+                app = flasher.download_to(asset["url"], cache, asset["name"], self._log)
                 # some profiles (ESP32-DIV/Bruce) pin an explicit per-asset offset
                 app_offset = asset.get("offset")
             else:
@@ -621,8 +653,11 @@ class FlasherDialog(QDialog):
         except Exception as e:
             QMessageBox.warning(self, "Bundle", f"Can't read bundle.json:\n{e}")
             return
-        board = manifest.get("variant") or manifest.get("name") or manifest.get("board") or "?"
-        man_chip = manifest.get("chip") or "?"
+        # Sanitize the operator-facing fields: a tampered bundle.json must NOT be able to spoof the
+        # confirmation (control chars, newlines, or an over-long string that hides the warning).
+        board = _clean_manifest_field(
+            manifest.get("variant") or manifest.get("name") or manifest.get("board"))
+        man_chip = _clean_manifest_field(manifest.get("chip"), max_len=24)
         if QMessageBox.question(
                 self, "Confirm suicide-build flash",
                 f"Flash anti-forensic bundle to board '{board}' ({man_chip}) via {port}?\n\n"

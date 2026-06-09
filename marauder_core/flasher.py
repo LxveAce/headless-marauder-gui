@@ -45,9 +45,12 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -55,6 +58,66 @@ LATEST_API = "https://api.github.com/repos/justcallmekoko/ESP32Marauder/releases
 RAW_BRANCHES = ("master", "main")
 RAW_TMPL = "https://raw.githubusercontent.com/justcallmekoko/ESP32Marauder/{branch}/FlashFiles/{path}"
 _UA = {"User-Agent": "headless-marauder-gui"}
+
+# SSRF / redirect hardening: every firmware/release fetch must be HTTPS to a host we trust.
+# A release-asset URL, an API response, or an HTTP redirect could otherwise point the
+# downloader at an internal/metadata endpoint (169.254.169.254, localhost, a LAN service) or
+# an attacker host. We pin the scheme to https and the host to GitHub's release/raw infra.
+_ALLOWED_HOSTS = frozenset((
+    "api.github.com",
+    "github.com",
+    "raw.githubusercontent.com",
+    "objects.githubusercontent.com",
+))
+_ALLOWED_HOST_SUFFIX = ".githubusercontent.com"   # e.g. objects-origin.githubusercontent.com
+
+
+def _host_allowed(host: Optional[str]) -> bool:
+    """True if `host` is an exact allowlisted GitHub host or a *.githubusercontent.com host."""
+    if not host:
+        return False
+    h = host.lower()
+    # Strip any userinfo / port that slipped through (urlsplit.hostname already does, but be safe).
+    h = h.split("@")[-1].split(":")[0]
+    return h in _ALLOWED_HOSTS or h.endswith(_ALLOWED_HOST_SUFFIX)
+
+
+def _require_allowed_url(url: str) -> str:
+    """Validate `url` is https:// to an allowlisted host; raise ValueError otherwise.
+
+    Returns the url unchanged on success so it can be used inline.
+    """
+    if not isinstance(url, str) or not url:
+        raise ValueError("refusing empty/invalid download URL")
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme.lower() != "https":
+        raise ValueError(f"refusing non-https URL scheme {parts.scheme!r}: {url!r}")
+    if not _host_allowed(parts.hostname):
+        raise ValueError(f"refusing URL to non-allowlisted host {parts.hostname!r}: {url!r}")
+    return url
+
+
+class _AllowlistRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject any HTTP redirect that points off the allowlisted host set.
+
+    GitHub release downloads legitimately 302 from github.com to
+    objects.githubusercontent.com, so redirects are allowed — but ONLY to hosts that pass
+    `_host_allowed` over https. A redirect to anything else (http://, an internal IP, a foreign
+    host) raises HTTPError instead of being followed, closing the SSRF-via-redirect hole.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parts = urllib.parse.urlsplit(newurl)
+        if parts.scheme.lower() != "https" or not _host_allowed(parts.hostname):
+            raise urllib.error.HTTPError(
+                newurl, code,
+                f"refusing redirect to non-allowlisted location: {newurl!r}",
+                headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# A module-level opener that enforces the redirect allowlist for every fetch in this module.
+_OPENER = urllib.request.build_opener(_AllowlistRedirectHandler())
 
 Line = Callable[[str], None]
 
@@ -191,13 +254,57 @@ def _detect_chip(port: str, on_line: Line) -> Optional[str]:
 
 
 def _http_get(url: str) -> bytes:
+    # SSRF guard: only https to an allowlisted GitHub host, and follow redirects ONLY to the
+    # same allowlist (via _OPENER's redirect handler).
+    _require_allowed_url(url)
     req = urllib.request.Request(url, headers=_UA)
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with _OPENER.open(req, timeout=30) as r:
         return r.read()
 
 
-def download_to(url: str, dest: str, on_line: Line) -> str:
-    on_line(f"[download] {os.path.basename(dest)}")
+def _safe_cache_name(name: str) -> str:
+    """Validate a download-target *name* is a plain in-directory basename, or raise ValueError.
+
+    Shared with the bundle path-traversal check (`_safe_bundle_join`): a release-asset name comes
+    from a remote manifest/API and is attacker-influenced, so before it is joined onto a cache
+    directory and opened we require it to be a bare basename — never empty/'.'/'..', a non-basename,
+    absolute, drive/UNC-prefixed, or ".."-bearing (after normalizing both / and \\). This stops a
+    hostile asset name (e.g. "..\\..\\evil.bin", "/abs/evil.bin", "C:\\evil.bin", "a/b.bin") from
+    being written outside the cache dir. Returns the validated basename.
+    """
+    if not isinstance(name, str) or name in ("", ".", ".."):
+        raise ValueError(f"refusing unsafe cache file name: {name!r}")
+    if os.path.basename(name) != name:
+        raise ValueError(f"refusing non-basename cache file name: {name!r}")
+    if os.path.isabs(name):
+        raise ValueError(f"refusing absolute cache file name: {name!r}")
+    drive, _ = os.path.splitdrive(name)
+    if drive:
+        raise ValueError(f"refusing cache file name with drive/UNC prefix: {name!r}")
+    # Normalize backslashes so a Windows-style "..\\.." or "a\\b" is caught on every platform.
+    norm = name.replace(chr(92), "/")
+    if ".." in norm.split("/") or "/" in norm:
+        raise ValueError(f"refusing cache file name with path separator/'..': {name!r}")
+    return name
+
+
+def download_to(url: str, cache_dir: str, name: str, on_line: Line) -> str:
+    """Download `url` into `cache_dir` under the sanitized basename `name`, returning the path.
+
+    Path-traversal sink defense: `name` is an attacker-influenced GitHub release-asset name, and
+    download_to itself builds + opens the destination, so the open() target is provably inside
+    `cache_dir`. `_safe_cache_name` rejects any empty/'.'/'..', non-basename, absolute, drive/UNC,
+    separator-bearing, or ".."-bearing name BEFORE the join, and we then assert the realpath of the
+    final dest is contained in cache_dir as belt-and-suspenders (catches symlink/OS quirks).
+    """
+    safe = _safe_cache_name(name)
+    dest = os.path.join(cache_dir, safe)
+    # Defense-in-depth: confirm the path we are about to open() stays inside cache_dir.
+    real_dir = os.path.realpath(cache_dir)
+    real_dest = os.path.realpath(dest)
+    if real_dest != os.path.join(real_dir, safe) and not real_dest.startswith(real_dir + os.sep):
+        raise ValueError(f"refusing download dest that escapes the cache dir: {dest!r}")
+    on_line(f"[download] {safe}")
     data = _http_get(url)
     with open(dest, "wb") as f:
         f.write(data)
@@ -359,11 +466,14 @@ class MarauderProfile(FirmwareProfile):
 
 
 def _fetch_flashfile(rel_path: str, dest: str, on_line: Line) -> str:
+    # `dest` is a full path built from a hardcoded (non-attacker) name; download_to now takes
+    # (cache_dir, name) and re-sanitizes the name, so split the trusted dest into its parts.
+    cache_dir_, name = os.path.split(dest)
     last = None
     for branch in RAW_BRANCHES:
         url = RAW_TMPL.format(branch=branch, path=rel_path)
         try:
-            return download_to(url, dest, on_line)
+            return download_to(url, cache_dir_, name, on_line)
         except Exception as e:
             last = e
     raise RuntimeError(f"could not fetch {rel_path}: {last}")
@@ -454,11 +564,14 @@ class Esp32DivProfile(FirmwareProfile):
 
 
 def _fetch_div_file(rel_path: str, dest: str, on_line: Line) -> str:
+    # `dest` is a full path built from a hardcoded (non-attacker) name; download_to now takes
+    # (cache_dir, name) and re-sanitizes the name, so split the trusted dest into its parts.
+    cache_dir_, name = os.path.split(dest)
     last = None
     for branch in _DIV_BRANCHES:
         url = _DIV_RAW_TMPL.format(branch=branch, path=rel_path)
         try:
-            return download_to(url, dest, on_line)
+            return download_to(url, cache_dir_, name, on_line)
         except Exception as e:
             last = e
     raise RuntimeError(f"could not fetch {rel_path}: {last}")
@@ -696,22 +809,14 @@ def _safe_bundle_join(bundle_dir: str, name: str) -> str:
     within the bundle dir (catches symlinks / OS-specific quirks). On any violation we raise
     ValueError so the caller NEVER hands a bad path to esptool.
     """
-    if not isinstance(name, str) or not name:
-        raise ValueError("bundle manifest file name must be a non-empty string")
-    # Normalize backslashes to forward slashes for the component scan so a Windows-style
-    # "..\\.." is caught on every platform.
-    norm = name.replace(chr(92), "/")
-    if ".." in norm.split("/"):
-        raise ValueError(f"refusing manifest file name with '..' path component: {name!r}")
-    # Plain-basename only: os.path.basename must equal the name, it must not be absolute, and
-    # it must carry no drive/UNC prefix (os.path.splitdrive catches 'C:' and '\\\\host\\share').
-    if os.path.basename(name) != name:
-        raise ValueError(f"refusing non-basename manifest file name: {name!r}")
-    if os.path.isabs(name):
-        raise ValueError(f"refusing absolute manifest file name: {name!r}")
-    drive, _ = os.path.splitdrive(name)
-    if drive:
-        raise ValueError(f"refusing manifest file name with drive/UNC prefix: {name!r}")
+    # Plain-basename only (shared with the download-cache sink): reject empty/'.'/'..', a
+    # non-basename, an absolute path, a drive/UNC prefix, or any separator/".." component.
+    # Backslashes are normalized so a Windows-style "..\\.." is caught on every platform.
+    # _safe_cache_name raises ValueError on any violation; re-raise with the manifest message.
+    try:
+        _safe_cache_name(name)
+    except ValueError as e:
+        raise ValueError(f"unsafe manifest file name: {e}")
     joined = os.path.join(bundle_dir, name)
     # Defense-in-depth: confirm the resolved path is contained in the resolved bundle dir.
     real_dir = os.path.realpath(bundle_dir)
@@ -785,23 +890,59 @@ def _bundle_offset(entry: Dict) -> int:
     return int(entry["offset"])
 
 
+# Canonical schema string a Suicide-Marauder provisioner stamps into bundle.json. When a bundle
+# declares this schema (or the active firmware profile supports the suicide flow), a missing/empty
+# sha256 on a PRESENT file is a HARD ERROR — no TOFU warn-and-flash for an anti-forensic build.
+_SUICIDE_SCHEMA = "suicide-marauder/bundle@1"
+
+
+def _is_suicide_bundle(manifest: Dict, profile: Optional["FirmwareProfile"] = None) -> bool:
+    """True when integrity MUST be enforced strictly (no missing-sha256 TOFU downgrade).
+
+    A bundle is treated as a suicide bundle when its manifest declares the suicide schema
+    (`schema`/`bundle_schema` == "suicide-marauder/bundle@1") OR the active firmware profile
+    advertises `supports_suicide`. flash_suicide is the Marauder suicide entrypoint, so it defaults
+    to the marauder profile (supports_suicide=True) — i.e. the strict path is the default here, and
+    warn-and-flash survives only for an explicitly non-suicide/custom bundle.
+    """
+    schema = manifest.get("schema") or manifest.get("bundle_schema")
+    if isinstance(schema, str) and schema.strip() == _SUICIDE_SCHEMA:
+        return True
+    if profile is not None and getattr(profile, "supports_suicide", False):
+        return True
+    return False
+
+
 def flash_suicide(port: str, chip: str, bundle_dir: str, on_line: Line,
-                  baud: int = 921600) -> int:
+                  baud: int = 921600, profile: Optional["FirmwareProfile"] = None) -> int:
     """Flash a pre-provisioned Suicide-Marauder bundle in ONE esptool write_flash.
 
     Reads bundle.json, validates every listed .bin name is a safe in-bundle basename and exists
-    (lists any that don't), verifies each image's SHA-256 against the manifest (present sha256 is
-    enforced, missing sha256 warns and is allowed for older bundles — TOFU), warns if the
-    manifest's chip disagrees with `chip`, then writes all offset/path pairs (sorted by offset)
-    in a single `write_flash -z --flash_size detect`. Mirrors flash() for reset/size handling.
+    (lists any that don't), verifies each image's SHA-256 against the manifest, warns if the
+    manifest's chip disagrees with `chip`, copies each VERIFIED image into a fresh 0700 tempdir and
+    re-hashes the staged copy (TOCTOU-safe: verify is atomic with flash), then writes the staged
+    offset/path pairs (sorted by offset) in a single `write_flash -z --flash_size detect`. Mirrors
+    flash() for reset/size handling. The staging dir is removed afterwards.
+
+    Integrity policy:
+      * SUICIDE bundle (manifest schema == "suicide-marauder/bundle@1", or the active profile
+        supports the suicide flow — the default here): a MISSING/empty sha256 on a present file is a
+        HARD ERROR (abort, rc 2). An anti-forensic build is NEVER flashed un-verified.
+      * non-suicide / custom bundle: a missing sha256 warns and is allowed (TOFU, older bundles).
+      * Any present sha256 is ENFORCED in BOTH cases.
 
     A path-traversal-unsafe manifest file name raises ValueError (esptool is never invoked); a
-    sha256 mismatch aborts with rc 2 before any esptool call (defense-in-depth vs a tampered bundle).
+    sha256 mismatch / missing-required-sha256 aborts with rc 2 before any esptool call.
+
+    `profile` defaults to the marauder profile (supports_suicide=True) for back-compat, so the
+    existing call `flash_suicide(port, chip, bundle_dir, on_line, baud=baud)` keeps working and
+    stays on the strict path.
 
     This NEVER burns eFuses and does NO T2/secure-boot provisioning — the Suicide-Marauder host
     provisioner does that; here we only flash an already-provisioned bundle. Returns the rc.
     """
     manifest = read_bundle_manifest(bundle_dir)
+    strict = _is_suicide_bundle(manifest, profile if profile is not None else _MARAUDER)
 
     man_chip = manifest.get("chip")
     if man_chip and man_chip != chip:
@@ -814,51 +955,97 @@ def flash_suicide(port: str, chip: str, bundle_dir: str, on_line: Line,
     # propagate so esptool is NEVER invoked on a tampered manifest. read_bundle_manifest already
     # validated the names, but we re-validate here so flash_suicide is safe even if a caller passes
     # a manifest it built itself.
-    pairs: List[Tuple[int, str]] = []
+    # Each tuple: (offset, src abs path, basename, expected-sha256-or-None).
+    entries: List[Tuple[int, str, str, Optional[str]]] = []
     missing: List[str] = []
     for entry in manifest["files"]:
-        abs_path = _safe_bundle_join(bundle_dir, entry["file"])
+        name = entry["file"]
+        abs_path = _safe_bundle_join(bundle_dir, name)
         if not os.path.isfile(abs_path):
-            missing.append(entry["file"])
+            missing.append(name)
             continue
-        pairs.append((_bundle_offset(entry), abs_path))
+        entries.append((_bundle_offset(entry), abs_path, name, entry.get("sha256")))
     if missing:
         on_line("[error] bundle is missing file(s): " + ", ".join(missing))
         return 2
 
-    # Integrity check (defense-in-depth vs a tampered bundle): recompute each image's SHA-256 and
-    # compare to the manifest. ABORT on mismatch so we never flash an image whose bytes don't match
-    # what the provisioner recorded. Back-compat (TOFU): an entry with NO "sha256" is allowed but
-    # warned (older bundles predate this field); a present "sha256" is ENFORCED. Done before any
-    # esptool call.
+    # Integrity check (defense-in-depth vs a tampered bundle): recompute each PRESENT image's
+    # SHA-256 and compare to the manifest. ABORT on mismatch so we never flash an image whose bytes
+    # don't match what the provisioner recorded.
+    #   * SUICIDE bundle: a missing/empty sha256 is a HARD ERROR (no TOFU downgrade for an
+    #     anti-forensic build) — abort rc 2.
+    #   * non-suicide bundle: a missing sha256 warns and is allowed (TOFU, older bundles).
+    # A present sha256 is ENFORCED in both cases. Done before any esptool call.
     integrity_failed: List[str] = []
-    for entry in manifest["files"]:
-        name = entry["file"]
-        abs_path = _safe_bundle_join(bundle_dir, name)
-        expected = entry.get("sha256")
+    missing_hash: List[str] = []
+    for off, abs_path, name, expected in entries:
         if not expected:
-            on_line(f"[WARNING] bundle entry {name!r} has no sha256 (older bundle); "
-                    f"flashing WITHOUT integrity verification for this file (TOFU)")
+            if strict:
+                on_line(f"[error] suicide bundle entry {name!r} has NO sha256 — refusing to "
+                        f"flash an anti-forensic build without integrity verification")
+                missing_hash.append(name)
+            else:
+                on_line(f"[WARNING] bundle entry {name!r} has no sha256 (older non-suicide "
+                        f"bundle); flashing WITHOUT integrity verification for this file (TOFU)")
             continue
         actual = _sha256_file(abs_path)
         if actual.lower() != str(expected).lower():
             on_line(f"[error] sha256 MISMATCH for {name!r}: "
                     f"manifest {str(expected).lower()} != actual {actual}")
             integrity_failed.append(name)
+    if missing_hash:
+        on_line("[error] aborting flash: suicide bundle requires a sha256 for every file; "
+                "missing for: " + ", ".join(missing_hash)
+                + " (re-provision with the current Suicide-Marauder provisioner)")
+        return 2
     if integrity_failed:
         on_line("[error] aborting flash: integrity check failed for: "
                 + ", ".join(integrity_failed)
                 + " (bundle may be corrupt or tampered; re-provision and try again)")
         return 2
 
-    pairs.sort(key=lambda p: p[0])
-    files: List[str] = []
-    for off, path in pairs:
-        files += [f"0x{off:x}", path]
+    # TOCTOU defense: between the hash above and esptool reading the file, the on-disk bytes could
+    # be swapped. Copy each verified image into a fresh private (0700) staging dir, RE-hash the
+    # staged copy against the manifest, and flash from the staged copies so verify is atomic with
+    # flash. Any re-hash failure aborts (rc 2) before esptool runs. The staging dir is always
+    # cleaned up.
+    staging = tempfile.mkdtemp(prefix="suicide_stage_")
+    try:
+        try:
+            os.chmod(staging, 0o700)   # no-op-ish on Windows, real on POSIX
+        except OSError:
+            pass
+        pairs: List[Tuple[int, str]] = []
+        restage_failed: List[str] = []
+        for off, abs_path, name, expected in entries:
+            # Prefix with the offset so two entries that share a basename (different flash offsets)
+            # can't clobber each other's staged copy.
+            staged = os.path.join(staging, f"0x{off:x}_{os.path.basename(name)}")
+            shutil.copyfile(abs_path, staged)
+            if expected:
+                staged_hash = _sha256_file(staged)
+                if staged_hash.lower() != str(expected).lower():
+                    on_line(f"[error] staged-copy sha256 MISMATCH for {name!r} "
+                            f"(file changed under us?): manifest {str(expected).lower()} "
+                            f"!= staged {staged_hash}")
+                    restage_failed.append(name)
+            pairs.append((off, staged))
+        if restage_failed:
+            on_line("[error] aborting flash: staged-copy integrity check failed for: "
+                    + ", ".join(restage_failed)
+                    + " (bundle changed during staging; re-provision and try again)")
+            return 2
 
-    # --flash_size detect mirrors flash(): patch the image header to the board's real size so a
-    # 4MB board doesn't boot-loop on an image whose header claims 16MB.
-    argv = esptool_argv("--chip", chip, "--port", port, "--baud", str(baud),
-                        "--before", "default_reset", "--after", "hard_reset",
-                        "write_flash", "-z", "--flash_size", "detect", *files)
-    return _run_stream(argv, on_line)
+        pairs.sort(key=lambda p: p[0])
+        files: List[str] = []
+        for off, path in pairs:
+            files += [f"0x{off:x}", path]
+
+        # --flash_size detect mirrors flash(): patch the image header to the board's real size so a
+        # 4MB board doesn't boot-loop on an image whose header claims 16MB.
+        argv = esptool_argv("--chip", chip, "--port", port, "--baud", str(baud),
+                            "--before", "default_reset", "--after", "hard_reset",
+                            "write_flash", "-z", "--flash_size", "detect", *files)
+        return _run_stream(argv, on_line)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)

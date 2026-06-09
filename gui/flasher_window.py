@@ -408,7 +408,7 @@ class FlasherWindow(tk.Toplevel):
                     self._log("[error] no variant selected"); return
                 if asset["chip"] != chip:
                     self._log(f"[!] WARNING: variant is for {asset['chip']} but chip is {chip}")
-                app = flasher.download_to(asset["url"], os.path.join(cache, asset["name"]), self._log)
+                app = flasher.download_to(asset["url"], cache, asset["name"], self._log)
             else:
                 app = local
 
