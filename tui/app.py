@@ -257,7 +257,7 @@ class FlashScreen(ModalScreen):
             if asset["chip"] != chip:
                 on(f"[!] variant is for {asset['chip']} but chip is {chip}")
             cache = flasher.cache_dir()
-            app = flasher.download_to(asset["url"], os.path.join(cache, asset["name"]), on)
+            app = flasher.download_to(asset["url"], cache, asset["name"], on)
             support = None
             if mode == "full":
                 on("[*] fetching bootloader/partitions/boot_app0...")
