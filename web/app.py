@@ -381,6 +381,61 @@ def on_flash_suicide_run(data):
     _run_flash_task(job)
 
 
+@socketio.on("flash_suicide_provision")
+def on_flash_suicide_provision(data):
+    """Provision a new suicide bundle on the host, then flash it to the board."""
+    port = (data.get("port") or "").strip()
+    if not port:
+        emit("flash_status", {"error": "No port specified"})
+        return
+    pw = data.get("password", "")
+    pw2 = data.get("password2", "")
+    if not pw:
+        emit("flash_status", {"error": "Enter a boot password"})
+        return
+    if pw != pw2:
+        emit("flash_status", {"error": "Passwords don't match"})
+        return
+    variant = data.get("variant", "fork")
+    try:
+        arm_pin = int(data.get("arm_pin", 27))
+        max_att = int(data.get("max_att", 2))
+    except (TypeError, ValueError):
+        emit("flash_status", {"error": "arm_pin and max_att must be numbers"})
+        return
+    deadman = int(data.get("deadman", 1))
+    armed = int(data.get("armed", 0))
+    build_dir = (data.get("build_dir") or "").strip() or None
+    chip_hint = data.get("chip") or None
+    try:
+        baud = int(data.get("baud", 921600))
+    except (TypeError, ValueError):
+        baud = 921600
+
+    _free_serial()
+
+    def job():
+        chip = chip_hint or flasher.detect_chip(port, _flash_line)
+        if not chip:
+            _flash_line("[error] chip unknown")
+            return 2
+        import suicide
+        _flash_line("[*] provisioning suicide bundle...")
+        try:
+            bundle_path = suicide.build_bundle(
+                password=pw, chip=chip, variant=variant,
+                arm_pin=arm_pin, max_att=max_att,
+                deadman=deadman, armed=armed,
+                build_dir=build_dir, on_line=_flash_line,
+            )
+        except Exception as e:
+            _flash_line(f"[error] provisioning failed: {e}")
+            return 2
+        return flasher.flash_suicide(port, chip, bundle_path, _flash_line, baud=baud)
+
+    _run_flash_task(job)
+
+
 @socketio.on("flash_erase")
 def on_flash_erase(data):
     port = (data.get("port") or "").strip()
