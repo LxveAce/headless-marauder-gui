@@ -31,6 +31,11 @@ class FlasherWindow(tk.Toplevel):
         self.assets = []
         self.tag = ""
         self._label_to_asset = {}
+        # Firmware-profile registry (additive): map combobox label -> profile id.
+        # Default is "marauder" so the original flow is the out-of-box behaviour.
+        self._profiles = flasher.list_profiles()
+        self._profile_label_to_id = {label: pid for pid, label in self._profiles}
+        self._suicide_row_shown = True   # surow is packed in _build (marauder default)
         self._busy = False
         self._need_refill = False   # set by worker threads; applied on the UI thread in _poll
         self._poll_id = None
@@ -57,6 +62,24 @@ class FlasherWindow(tk.Toplevel):
     # --- layout ----------------------------------------------------------- #
     def _build(self):
         pad = {"padx": 8, "pady": 4}
+
+        # firmware profile selector (additive) — picks WHICH firmware to flash.
+        # Defaults to the Marauder profile so the original behaviour is unchanged.
+        frow = tk.Frame(self, bg=PANEL); frow.pack(fill="x", **pad)
+        tk.Label(frow, text="Firmware:", bg=PANEL, fg=FG).pack(side="left")
+        self.profile_var = tk.StringVar()
+        profile_labels = [label for _pid, label in self._profiles]
+        self.profile_combo = ttk.Combobox(frow, textvariable=self.profile_var, width=34,
+                                           state="readonly", values=profile_labels)
+        self.profile_combo.pack(side="left", padx=6)
+        self.profile_combo.bind("<<ComboboxSelected>>", self._on_profile_change)
+        # default to the marauder profile (falls back to the first entry if absent)
+        default_label = next((lbl for pid, lbl in self._profiles if pid == "marauder"),
+                             profile_labels[0] if profile_labels else "")
+        self.profile_var.set(default_label)
+        Tooltip(self.profile_combo, "Which firmware to flash. 'ESP32 Marauder' is the default "
+                "and keeps the original behaviour (and the suicide-bundle option). Other "
+                "profiles flash their stock images byte-for-byte — no extra features are added.")
 
         row = tk.Frame(self, bg=PANEL); row.pack(fill="x", **pad)
         tk.Label(row, text="Port:", bg=PANEL, fg=FG).pack(side="left")
@@ -134,9 +157,11 @@ class FlasherWindow(tk.Toplevel):
 
         # --- opt-in: Suicide build (flash a pre-provisioned hardened bundle) ---
         # Plain flashing above stays the default; this only engages when ticked.
-        surow = tk.Frame(self, bg=PANEL); surow.pack(fill="x", **pad)
+        # The whole row is shown only for profiles whose .supports_suicide is True
+        # (the Marauder profile); _apply_profile_suicide_visibility() toggles it.
+        self.suicide_row = tk.Frame(self, bg=PANEL); self.suicide_row.pack(fill="x", **pad)
         self.suicide = tk.BooleanVar(value=False)
-        suicide_cb = ttk.Checkbutton(surow, text="Suicide build (flash provisioned bundle)",
+        suicide_cb = ttk.Checkbutton(self.suicide_row, text="Suicide build (flash provisioned bundle)",
                                      variable=self.suicide, command=self._toggle_suicide)
         suicide_cb.pack(side="left")
         Tooltip(suicide_cb, GLOSSARY["suicide build"] + "\n\nWhen ticked, FLASH writes the "
@@ -190,6 +215,9 @@ class FlasherWindow(tk.Toplevel):
                                state="disabled", font=("monospace", 9))
         self.console.pack(fill="both", expand=True, padx=8, pady=6)
 
+        # apply suicide-row visibility for the initial profile (marauder -> visible)
+        self._apply_profile_suicide_visibility()
+
     # --- helpers ---------------------------------------------------------- #
     def _log(self, s):
         self.q.put(s)
@@ -238,6 +266,42 @@ class FlasherWindow(tk.Toplevel):
 
         threading.Thread(target=run, daemon=True).start()
 
+    # --- firmware profile ------------------------------------------------- #
+    def _current_profile(self):
+        """Resolve the selected combobox label to its FirmwareProfile (defaults to
+        marauder if the selection is somehow unknown)."""
+        pid = self._profile_label_to_id.get(self.profile_var.get(), "marauder")
+        return flasher.get_profile(pid)
+
+    def _apply_profile_suicide_visibility(self):
+        """Show the suicide-bundle row only for profiles that support it (marauder)."""
+        supports = self._current_profile().supports_suicide
+        if supports:
+            if not self._suicide_row_shown:
+                # restore it to its original slot: just above the baud/actions row
+                self.suicide_row.pack(fill="x", padx=8, pady=4, before=self.flash_btn.master)
+                self._suicide_row_shown = True
+        else:
+            # untick + hide the bundle sub-row so a non-suicide profile can't flash a bundle
+            if self.suicide.get():
+                self.suicide.set(False)
+                self._toggle_suicide()
+            if self._suicide_row_shown:
+                self.suicide_row.pack_forget()
+                self._suicide_row_shown = False
+
+    def _on_profile_change(self, _evt=None):
+        """Switching firmware invalidates the previously-loaded release/variant list
+        (assets belong to one profile). Clear it and refresh suicide visibility."""
+        self.assets = []
+        self.tag = ""
+        self._label_to_asset = {}
+        self.variant_combo["values"] = []
+        self.variant_var.set("")
+        self._apply_profile_suicide_visibility()
+        self._log(f"[i] firmware profile: {self._current_profile().label} "
+                  "(click 'Load release list' to fetch its variants)")
+
     # --- actions ---------------------------------------------------------- #
     def _detect(self):
         port = self.port_var.get().strip()
@@ -252,9 +316,10 @@ class FlasherWindow(tk.Toplevel):
         self._worker(job)
 
     def _load_release(self):
+        profile = self._current_profile()
         def job():
-            self._log("[*] fetching latest release...")
-            self.tag, self.assets = flasher.latest_release()
+            self._log(f"[*] fetching latest release ({profile.label})...")
+            self.tag, self.assets = profile.latest_release()
             self._log(f"[i] {self.tag}: {len(self.assets)} firmware variants")
             self._need_refill = True
         self._worker(job)
@@ -262,13 +327,14 @@ class FlasherWindow(tk.Toplevel):
     def _refill_variants(self):
         if not self.assets:
             return
+        profile = self._current_profile()
         items = self.assets if (self.showall.get() or not self.chip) \
-            else flasher.variants_for_chip(self.assets, self.chip)
+            else profile.variants_for_chip(self.assets, self.chip)
         self._label_to_asset = {f"{a['label']}  [{a['name']}]": a for a in items}
         labels = list(self._label_to_asset)
         self.variant_combo["values"] = labels
         if labels:
-            default = flasher.default_variant(items, self.chip) if self.chip else None
+            default = profile.default_variant(items, self.chip) if self.chip else None
             pick = next((l for l, a in self._label_to_asset.items() if default and a["name"] == default["name"]), labels[0])
             self.variant_var.set(pick)
 
@@ -322,6 +388,7 @@ class FlasherWindow(tk.Toplevel):
                                    f"Flash {mode} via {port} @ {baud}?\nDo not unplug during flashing."):
             return
         # capture all widget values on the UI thread BEFORE starting the worker
+        profile = self._current_profile()
         asset = self._label_to_asset.get(self.variant_var.get()) if source == "download" else None
         local = self.local_var.get().strip()
         self._free_port()
@@ -331,6 +398,10 @@ class FlasherWindow(tk.Toplevel):
             if not chip:
                 self._log("[error] could not detect chip; aborting"); return
             cache = flasher.cache_dir()
+
+            # an asset may pin its own flash offset (e.g. merged image @0x0, app-only
+            # @0x10000); otherwise fall back to the profile's per-chip app_offset.
+            app_offset = asset.get("offset") if (source == "download" and asset) else None
 
             if source == "download":
                 if not asset:
@@ -344,10 +415,17 @@ class FlasherWindow(tk.Toplevel):
             support = None
             if mode == "full":
                 self._log("[*] fetching bootloader/partitions/boot_app0...")
-                support = flasher.support_files(chip, cache, self._log)
+                support = profile.support_files(chip, cache, self._log)
+                if support is None:
+                    # merged-single-bin profiles (e.g. Bruce) carry the boot chain inside
+                    # the image, so a full flash needs nothing extra — write the image alone.
+                    self._log("[i] this firmware is a merged single image; no separate "
+                              "bootloader/partitions needed")
 
-            self._log(f"[*] flashing ({mode}) {os.path.basename(app)} to {chip}...")
-            rc = flasher.flash(port, chip, app, self._log, mode=mode, baud=baud, support=support)
+            self._log(f"[*] flashing ({mode}) {os.path.basename(app)} to {chip} "
+                      f"[{profile.label}]...")
+            rc = profile.flash_assets(port, chip, app, self._log, mode=mode, baud=baud,
+                                      support=support, app_offset=app_offset)
             self._log("[✓] done — power-cycle the board" if rc == 0 else f"[x] esptool exit {rc}")
         self._worker(job)
 

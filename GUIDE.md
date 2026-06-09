@@ -35,7 +35,7 @@ is always the same:
 - **Select APs / Select Stations** → tick targets in the picker (it builds the right `select -a 0,2,5`).
 - Run an action (e.g. **Deauth (selected APs)**).
 - **● Log** → record everything to a folder (see [§5](#5-data--logging)).
-- **⚡ Flash Firmware** → detect chip, fetch firmware, flash.
+- **⚡ Flash Firmware** → pick the **Firmware** (ESP32 Marauder by default; or ESP32-DIV / Custom local `.bin`), detect chip, fetch firmware, flash. See [§7](#7-flashing-built-in).
 - **Raw box** (bottom) → type any command the buttons don't cover.
 
 Keyboard: `Ctrl+L` clear · `F5` refresh ports · `Ctrl+K` command box · `Ctrl+.` STOP · `Ctrl+U` update.
@@ -138,14 +138,14 @@ The classic chain — deauth forces clients to re-handshake, which you capture, 
    clients land on yours. Captured credentials are written to the SD card.
 
 ### D. Wardriving → map it on WiGLE
-1. Plug in GPS (the deck shares one GPS via `gpsd`).
+1. Plug in a GPS module (NMEA over serial, or shared via `gpsd`).
 2. **Wardrive** (`wardrive`) while moving — writes a **WiGLE-format CSV** (`wardrive_*.csv`) to SD.
 3. Upload that CSV to **wigle.net** (counts toward your stats / builds a coverage map).
 
 ### E. Find who's following you (BLE)
 1. **Sniff Bluetooth** `sniffbt -t airtag` to surface trackers; `-t flock` for Flock cameras.
 2. **MAC Track** a suspicious MAC to gauge proximity as you move.
-3. Correlate sightings over time/location with **Chasing Your Tail NG** on the Pi (see the cyberdeck).
+3. Correlate sightings over time/location with a tool like **Chasing Your Tail NG**.
 
 ### F. Probe-sniff → Karma lure
 1. **Sniff Probes** to learn which SSIDs nearby devices are searching for.
@@ -176,9 +176,8 @@ PCAP/Evil-Portal/wardrive output lives on the **board's SD card** (pull it over 
 
 ## 6. Using it with the rest of your kit
 
-- **The cyberdeck dashboard** — `marauder_core` is importable; the deck's
-  [dashboard](https://github.com/LxveAce/Projects/tree/main/projects/14-cyberdeck/integrations/parts/dashboard)
-  reuses it to show Marauder beside Kismet/Meshtastic/GPS.
+- **Your own dashboard** — `marauder_core` is importable; build a dashboard on it to show Marauder
+  beside other tools (Kismet/Meshtastic/GPS).
 - **Kismet** — run Kismet on the Pi for deep WiFi mapping while Marauder does active attacks; both
   can share the **same GPS** via `gpsd` (`localhost:2947`).
 - **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking (chain A).
@@ -189,19 +188,40 @@ PCAP/Evil-Portal/wardrive output lives on the **board's SD card** (pull it over 
 
 ## 7. Flashing (built in)
 
-⚡ **Flash Firmware** → **Detect chip** → **Load release list** → pick a variant →
+⚡ **Flash Firmware** → pick the **Firmware** → **Detect chip** → **Load release list** → pick a variant →
 **Update app only** (existing board) or **Full flash** (blank board). Uses `esptool` with
 `--flash_size detect`. Classic ESP32 Gold → a non-S3 variant (e.g. *old_hardware*); S3 → *MultiBoard S3*.
 
-> **Tooltips:** every flasher control — including the **Suicide** checkbox and its bundle-dir
-> field — has a hover tooltip explaining what it does.
+### Firmware types (the Firmware selector)
+
+The flasher reuses one esptool pipeline for several firmwares. Pick from the **Firmware** dropdown:
+
+| Firmware | What it is | How it flashes | Suicide build? |
+|---|---|---|---|
+| **ESP32 Marauder** *(default)* | The full native control app this tool is built around — live tables, target picker, every command (everything in §1–§6 above). | Pulls the right variant from the official Marauder GitHub release and flashes at the correct offsets. | **Yes — Marauder only** (§8). |
+| **ESP32-DIV** ([cifertech/esp32-div](https://github.com/cifertech/esp32-div)) | A separate standalone ESP32 firmware. **Flash-only here** — once it's on the board it runs on its own; this app has no native control panel for it. | Fetches the official ESP32-DIV image and its boot chain and flashes them byte-for-byte. | No. |
+| **Custom / local `.bin`** | Any other ESP32 firmware you have a `.bin` for. | You point the flasher at a local `.bin`; it flashes with chip-appropriate default offsets. Nothing is downloaded. | No. |
+
+> **ESP32-DIV jamming features are illegal to operate and are NOT part of this tool.** ESP32-DIV
+> ships RF-jamming functionality that is illegal to use in most jurisdictions (e.g. FCC rules).
+> This tool only **flashes** the official ESP32-DIV image — it adds, enables, and controls **none**
+> of that. What the firmware does after it's flashed is entirely your responsibility (see [Legal](#legal)).
+
+> The **Firmware** selector is purely additive: leave it on **ESP32 Marauder** (the default) and the
+> entire app — control panel, tables, attacks, logging, and the Suicide path — behaves exactly as
+> documented in this guide.
+
+> **Tooltips:** every flasher control — including the **Firmware** selector, the **Suicide** checkbox
+> and its bundle-dir field — has a hover tooltip explaining what it does.
 
 ---
 
 ## 8. Suicide build & flashing it (anti-forensic, opt-in)
 
-This is an **optional, owner-only, defensive** layer. Plain Marauder is the default; the suicide
-path is gated behind a single **Suicide** checkbox and changes nothing unless you tick it.
+This is an **optional, owner-only, defensive** layer that **applies to the ESP32 Marauder firmware
+only** — it has no meaning for ESP32-DIV or Custom firmware. With the **Firmware** selector on
+ESP32 Marauder (the default), plain Marauder is still the default; the suicide path is gated behind
+a single **Suicide** checkbox and changes nothing unless you tick it.
 
 ### What it is
 A hardened Marauder variant that can **wipe its own secrets** so a lost or seized board protects
@@ -251,3 +271,8 @@ For **authorized security testing only** — networks/devices you own or have **
 to test. Deauth, evil-portal, beacon/BLE spam, and karma can be illegal against others (US CFAA,
 FCC rules, and equivalents). Many modern networks ignore deauth (802.11w/PMF). You are responsible
 for your use. See the firmware's own [legal notes](https://github.com/justcallmekoko/ESP32Marauder).
+
+**ESP32-DIV (optional flash target):** its RF-**jamming** features are **illegal to operate** in
+most jurisdictions (e.g. FCC rules) and are **NOT part of this tool** — this app only *flashes* the
+official ESP32-DIV image and neither enables nor controls any such feature. What that firmware does
+once it's on the board is entirely your responsibility.

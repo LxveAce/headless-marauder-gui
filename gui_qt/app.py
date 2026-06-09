@@ -244,8 +244,29 @@ class FlasherDialog(QDialog):
         self.by_name = {}
         self._busy = False
         self._need_refill = False   # set by worker threads; applied on the GUI thread in _drain
+        # Selected firmware profile (default = marauder, so existing behaviour is unchanged).
+        self.profile = flasher.get_profile("marauder")
 
         lay = QVBoxLayout(self)
+
+        # --- firmware profile selector (additive; default = Marauder) --------- #
+        frow = QHBoxLayout()
+        frow.addWidget(QLabel("Firmware:"))
+        self.fw_combo = QComboBox()
+        self._profiles = flasher.list_profiles()      # [(id, label) ...] in registry order
+        for _pid, _plabel in self._profiles:
+            self.fw_combo.addItem(_plabel)
+        # default to marauder so the existing flow is the default selection
+        for _i, (_pid, _plabel) in enumerate(self._profiles):
+            if _pid == "marauder":
+                self.fw_combo.setCurrentIndex(_i)
+                break
+        self.fw_combo.setToolTip("Which firmware to flash. Defaults to ESP32 Marauder (the normal "
+                                 "flow). Switching re-targets the release list / variant picker at the "
+                                 "selected firmware; the suicide-build option is Marauder-only.")
+        self.fw_combo.currentIndexChanged.connect(self._on_profile_changed)
+        frow.addWidget(self.fw_combo); frow.addStretch()
+        lay.addLayout(frow)
 
         prow = QHBoxLayout()
         prow.addWidget(QLabel("Port:"))
@@ -365,6 +386,11 @@ class FlasherDialog(QDialog):
         self.console = QPlainTextEdit(); self.console.setReadOnly(True); lay.addWidget(self.console)
         self.console.setToolTip("Live esptool output for the current detect / flash / erase operation.")
 
+        # Apply the initial profile-dependent visibility (default = marauder: all rows shown,
+        # suicide checkbox visible). This is a no-op for the Marauder default beyond confirming
+        # the as-designed layout.
+        self._apply_profile_ui()
+
         self.timer = QTimer(self); self.timer.timeout.connect(self._drain); self.timer.start(40)
         if not flasher.esptool_available():
             self._log("[!] esptool not found — pip install esptool")
@@ -415,9 +441,10 @@ class FlasherDialog(QDialog):
         self._work(job)
 
     def _load(self):
+        profile = self.profile          # captured on the GUI thread
         def job():
-            self._log("[*] fetching latest release...")
-            tag, self.assets = flasher.latest_release()
+            self._log(f"[*] fetching latest release for {profile.label}...")
+            tag, self.assets = profile.latest_release()
             self._log(f"[i] {tag}: {len(self.assets)} variants")
             self._need_refill = True
         self._work(job)
@@ -426,10 +453,10 @@ class FlasherDialog(QDialog):
         if not self.assets:
             return
         items = self.assets if (self.showall.isChecked() or not self.chip) \
-            else flasher.variants_for_chip(self.assets, self.chip)
+            else self.profile.variants_for_chip(self.assets, self.chip)
         self.by_name = {f"{a['label']}  [{a['name']}]": a for a in items}
         self.variant.clear(); self.variant.addItems(list(self.by_name))
-        d = flasher.default_variant(items, self.chip) if self.chip else None
+        d = self.profile.default_variant(items, self.chip) if self.chip else None
         if d:
             for i, (lbl, a) in enumerate(self.by_name.items()):
                 if a["name"] == d["name"]:
@@ -440,15 +467,54 @@ class FlasherDialog(QDialog):
         if path:
             self.local.setText(path); self.src_local.setChecked(True)
 
+    # --- firmware-profile selection (additive; marauder is the default) ----- #
+    def _on_profile_changed(self, idx):
+        """Re-target detect/release-list/variant logic at the selected firmware profile.
+
+        Marauder (the default) keeps every existing row and the suicide option. Other
+        profiles hide the suicide checkbox; the 'custom' local-only profile additionally
+        hides the download/release rows and just uses the local .bin path."""
+        if idx < 0 or idx >= len(self._profiles):
+            return
+        pid = self._profiles[idx][0]
+        self.profile = flasher.get_profile(pid)
+        # Switching firmware invalidates the previously loaded release list/variants.
+        self.assets = []
+        self.by_name = {}
+        self.variant.clear()
+        self._apply_profile_ui()
+
+    def _apply_profile_ui(self):
+        """Show/hide profile-dependent widgets. Called on profile change and after the
+        suicide toggle so the two stay consistent. Never touches the Marauder defaults."""
+        supports_suicide = self.profile.supports_suicide
+        is_custom = (self.profile.id == "custom")
+        # The suicide checkbox is only meaningful for Marauder; hide+disable it otherwise so
+        # it can't be ticked for ESP32-DIV / Bruce / custom.
+        if not supports_suicide and self.suicide_cb.isChecked():
+            self.suicide_cb.setChecked(False)   # also fires _toggle_suicide -> hides the panel
+        self.suicide_cb.setVisible(supports_suicide)
+        self.suicide_cb.setEnabled(supports_suicide)
+        in_suicide = supports_suicide and self.suicide_cb.isChecked()
+        # When NOT in suicide mode, the normal rows are visible — except 'custom' hides the
+        # remote download/release rows (it flashes a local .bin only).
+        self.mode_row_w.setVisible(not in_suicide)
+        self.src_row_w.setVisible(not in_suicide and not is_custom)
+        self.dl_row_w.setVisible(not in_suicide and not is_custom)
+        # custom is local-only: keep the local-path row visible and force the local source.
+        self.local_row_w.setVisible(not in_suicide)
+        if is_custom:
+            self.src_local.setChecked(True)
+
     # --- suicide-build path (opt-in; default/core path is untouched) -------- #
     def _toggle_suicide(self):
         """Reveal the bundle sub-panel and hide the normal mode/source/variant rows
         when 'Suicide build' is checked. Unchecked == the dialog behaves exactly as today."""
         on = self.suicide_cb.isChecked()
         self.suicide_panel.setVisible(on)
-        # Hide the normal-mode rows so the user only sees bundle + flash when in suicide mode.
-        for w in (self.mode_row_w, self.src_row_w, self.dl_row_w, self.local_row_w):
-            w.setVisible(not on)
+        # Row visibility (mode/source/download/local) is owned by _apply_profile_ui so the
+        # suicide toggle and the firmware-profile selection stay consistent.
+        self._apply_profile_ui()
 
     def _browse_bundle(self):
         d = QFileDialog.getExistingDirectory(self, "Select bundle folder", self.bundle_dir.text().strip())
@@ -505,7 +571,10 @@ class FlasherDialog(QDialog):
             return
         # capture all widget values on the GUI thread BEFORE starting the worker
         baud = int(self.baud.currentText())
-        use_download = self.src_dl.isChecked()
+        profile = self.profile
+        is_marauder = (profile.id == "marauder")
+        # 'custom' is local-only and the source row is hidden, so always use the local path.
+        use_download = self.src_dl.isChecked() and profile.id != "custom"
         asset = self.by_name.get(self.variant.currentText()) if use_download else None
         local = self.local.text().strip()
         self._free()
@@ -515,16 +584,25 @@ class FlasherDialog(QDialog):
             if not chip:
                 self._log("[error] chip unknown"); return
             cache = flasher.cache_dir()
+            app_offset = None
             if use_download:
                 if not asset:
                     self._log("[error] no variant selected"); return
                 if asset["chip"] != chip:
                     self._log(f"[!] variant is {asset['chip']} but chip is {chip}")
                 app = flasher.download_to(asset["url"], os.path.join(cache, asset["name"]), self._log)
+                # some profiles (ESP32-DIV/Bruce) pin an explicit per-asset offset
+                app_offset = asset.get("offset")
             else:
                 app = local
-            support = flasher.support_files(chip, cache, self._log) if mode == "full" else None
-            rc = flasher.flash(port, chip, app, self._log, mode=mode, baud=baud, support=support)
+            if is_marauder:
+                # Marauder default flow — unchanged, byte-for-byte (back-compat wrappers).
+                support = flasher.support_files(chip, cache, self._log) if mode == "full" else None
+                rc = flasher.flash(port, chip, app, self._log, mode=mode, baud=baud, support=support)
+            else:
+                support = profile.support_files(chip, cache, self._log) if mode == "full" else None
+                rc = profile.flash_assets(port, chip, app, self._log, mode=mode, baud=baud,
+                                          support=support, app_offset=app_offset)
             self._log("[done] power-cycle the board" if rc == 0 else f"[x] exit {rc}")
         self._work(job)
 
