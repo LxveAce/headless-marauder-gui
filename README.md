@@ -2,9 +2,9 @@
 
 **The all-in-one ESP32 Marauder controller and multi-firmware flasher.** Open source, cross-platform, one-click standalone exe — no Python, no browser, no cloud. Just download, run, and plug in your board.
 
-> Works with any ESP32 running Marauder firmware — headless boards (like a Lonely Binary "Gold" with an antenna and no screen) or screened devices (CYD, M5Stack, Flipper devboards). A full-featured GUI for controlling and flashing ESP32 Marauder from a Raspberry Pi, laptop, or cyberdeck.
+> Works with any ESP32 running Marauder firmware — headless boards (like a Lonely Binary "Gold" with an antenna and no screen) or screened devices (CYD, M5Stack, Flipper devboards). The "Gold" and most headless dev boards are **classic ESP32** (WROOM, CH340 USB-serial), not S3. A full-featured GUI for controlling and flashing ESP32 Marauder from a Raspberry Pi, laptop, or cyberdeck.
 
-**Runs on:** Linux (Kali, Debian, Ubuntu, Arch, Fedora), Windows 10/11, macOS, Raspberry Pi (ARM64)
+**Runs on:** Linux (Kali, Debian, Ubuntu, Arch, Fedora), Windows 10/11, macOS (Apple Silicon), Raspberry Pi (ARM64)
 
 ---
 
@@ -15,7 +15,7 @@ Most Marauder UIs are browser-based and depend on the Web Serial API (Chromium o
 Headless Marauder is different:
 
 - **All-in-one** — controller AND flasher in a single app. Connect, scan, attack, flash firmware, flash a suicide build — all without switching tools. No separate esptool workflow, no Arduino IDE, no web flasher.
-- **One-click exe** — standalone binaries for Windows, Linux x64, and Linux ARM64. Everything is bundled (Python, PyQt5, all deps). Download, double-click, go. No install, no setup, no dependencies.
+- **One-click exe** — standalone binaries for Windows, Linux x64, Linux ARM64, and macOS (Apple Silicon). Everything is bundled (Python, PyQt5, all deps). Download, double-click, go. No install, no setup, no dependencies.
 - **Open source** — MIT licensed, fully transparent. Read every line, fork it, modify it, contribute back.
 - **Suicide build support** — the only Marauder controller with built-in support for flashing anti-forensic Suicide-Marauder bundles. Provision once, flash from the app with integrity verification. See [below](#suicide-build).
 - **Community-driven** — built by and for the community, with many more features to come. PRs, ideas, and bug reports welcome.
@@ -27,36 +27,37 @@ Headless Marauder is different:
 ### Control
 
 - **Four front-ends, one core** — PyQt5 desktop GUI (recommended), Tkinter GUI, Textual TUI for terminal/SSH, and a browser UI (Flask + WebSocket at localhost:5000). Dark theme across all of them.
-- **Every Marauder command** (70+) organized into categories as buttons and tree entries, with parameter forms and a raw command box. Auto-connect at 115200 baud, or specify `--port` and `--baud`.
+- **The full Marauder command set** — 70 commands organized into categories as buttons and tree entries, with parameter forms and a raw command box. Auto-connect at 115200 baud, or specify `--port` and `--baud`.
 - **Live AP/Station tables** — `scanap` fills the Access Points tab in real-time; APs and stations parsed and de-duplicated straight off the serial stream. Auto-list polls every 3 seconds to keep tables current during scans.
 - **Target picker** — check the networks you want, select all, or type indices manually. Builds the right `select -a 0,2,5` from Marauder's real indices.
 - **Hover tooltips** — every button, field, and checkbox has a plain-language tooltip explaining what it does. Shared glossary across all UIs.
 
 ### Full command coverage
 
-Not just WiFi scanning and deauth — the full Marauder command set across 10+ categories:
+Not just WiFi scanning and deauth — the catalog (`marauder_core/commands.py`) is the single source of truth that drives every front-end, organized into categories:
 
 | Category | What's in it |
 |----------|-------------|
-| **WiFi Scan** | AP scan, station scan, raw PMKID capture, deauth + sniff, probe request scan, directed probe |
-| **WiFi Sniff** | Beacon, deauth, PMKID, probe, ESP management, and raw packet sniffing with PCAP-to-SD |
-| **WiFi Attack** | Deauth (selected/listed), beacon spam (random/rickroll/list), probe spam, evil portal, AP clone, Rick Roll AP |
-| **WiFi Network** | Join a scanned AP, ping scan the local network, TCP port scan (with all-ports option) |
-| **Bluetooth** | BLE scan, skimmer detection (`sniffskim`), Pwnagotchi detection (`sniffpwn`), AirTag/Flipper/Flock tracking sniff, BLE spam (SourApple, Swiftpair, Samsung, Google, AppJuice, Flipper, All) |
-| **GPS / Wardrive** | WiFi wardrive (WiGLE CSV), BT wardrive, GPS field queries (fix, lat/lon, altitude, satellites, accuracy, raw NMEA) |
-| **Lists & Targets** | Select/clear APs and stations, list APs/clients, auto-list toggle |
-| **SSID** | Add/clear/generate random SSIDs for beacon spam lists |
-| **Files** | SD card listing, save/load AP and SSID lists to SD |
-| **System** | Settings toggles, LED color/effects, reboot, device info, OTA updates (serial + WiFi), help |
+| **WiFi · Scan** | AP scan, station scan, scan-all, signal monitor, packet count, MAC track, GPS wardrive |
+| **WiFi · Sniff** | Raw, beacon, probe, deauth (detect), ESP, Pwnagotchi, and PMKID/EAPOL capture (SavePCAP to SD) |
+| **WiFi · Attack** | Deauth (selected APs / selected clients), beacon spam (list / random / clone), probe flood, rickroll beacon, bad-msg, evil portal, karma |
+| **WiFi · Network** | Join a scanned AP, ping scan the local network, TCP port scan (with all-ports option) |
+| **Bluetooth** | BLE scan (AirTag / Flipper / Flock filters), BT wardrive, skimmer detection, AirTag spoof, and BLE spam (Sour Apple, AppleJuice, Google, Samsung, Windows/Swiftpair, Flipper, All) |
+| **GPS** | Live GPS readout, raw NMEA stream, and per-field queries (fix, sats, lat/lon, altitude, date, accuracy) |
+| **Lists & Targets** | Select/clear APs, stations, and SSIDs; list APs/clients/SSIDs/targets; select-by-filter; device info |
+| **SSID** | Add a named SSID, generate N random SSIDs, remove by index |
+| **Channel** | Show / set the active WiFi channel |
+| **Files** | SD-card directory listing, save/load AP and SSID lists to SD |
+| **System** | Settings toggles, LED color/rainbow, OTA updates (serial + WiFi), reboot, device help, stopscan |
 
 ### Flasher
 
-- **Multi-firmware flasher** — flash [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder), [ESP32-DIV](https://github.com/cifertech/esp32-div), [Bruce](https://github.com/pr3y/Bruce), or any custom local `.bin`. Firmware selector dropdown switches profiles and UI dynamically.
-- **Auto chip detection** — identifies ESP32, ESP32-S2, ESP32-S3, ESP32-C3, ESP32-C5 and auto-selects the right firmware variant.
-- **App-only or full flash** — update an existing board (app image only) or flash a blank board from scratch (bootloader + partitions + boot_app0 + app).
+- **Multi-firmware flasher** — flash [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) (default), [ESP32-DIV](https://github.com/cifertech/esp32-div), [Bruce](https://github.com/pr3y/Bruce), or any custom local `.bin`. A pluggable `FirmwareProfile` registry drives the detect/release/variant logic per firmware, and the **Firmware** selector switches profiles and UI dynamically.
+- **Auto chip detection** — identifies classic ESP32, ESP32-S2, ESP32-S3, ESP32-C2/C3/C5/C6, and ESP32-H2 via esptool, then auto-selects the matching firmware variant.
+- **App-only or full flash** — update an existing board (app image only) or flash a blank board from scratch (bootloader + partitions + boot_app0 + app, with the right per-chip offsets).
 - **Erase flash** — full chip erase for a clean slate.
-- **Suicide build flashing** — one-click flash of pre-provisioned anti-forensic Marauder bundles with SHA256 integrity verification. See [below](#suicide-build).
-- **Security hardened** — HTTPS-only firmware fetching with host allowlist, path-traversal protection on all downloads, SSRF/redirect defense.
+- **Suicide build flashing** — one-click flash of pre-provisioned anti-forensic Marauder bundles with SHA256 integrity verification. Flash-only; it never burns eFuses. See [below](#suicide-build).
+- **Security hardened** — HTTPS-only firmware fetching with a GitHub host allowlist, path-traversal protection on all downloads, and SSRF/redirect defense (redirects are followed only to allowlisted hosts).
 
 ### Logging & data export
 
@@ -68,7 +69,7 @@ Not just WiFi scanning and deauth — the full Marauder command set across 10+ c
 
 - **`--mock` mode** — run the full UI without hardware for demo, dev, or testing.
 - **Built-in guide** — in-app Guide tab covers attack chaining and feeding data into Wireshark, hashcat, WiGLE, Kismet, etc.
-- **Self-update** — Help > Check for Updates pulls the latest code and reinstalls deps.
+- **Self-update** — Help > Check for Updates pulls the latest code and reinstalls deps (source installs).
 - **Installable** — adds to your PATH, app menu (Linux), Start Menu (Windows). Run from anywhere.
 
 ---
@@ -113,7 +114,7 @@ That's it. The app reads the bundle manifest, verifies the SHA256 hash of every 
 
 **Plain Marauder is always the default.** Leave the Suicide checkbox unchecked and the flasher works exactly like a normal firmware update. The suicide path is entirely opt-in.
 
-> **Read the Suicide-Marauder repo's [SAFETY.md](https://github.com/LxveAce/Suicide-Marauder/blob/main/SAFETY.md) before enabling this.** The 2-fail wipe is real. Test in safe mode first. This is a defensive, owner-only measure for protecting your own hardware — not an attack tool.
+> **Read the Suicide-Marauder repo's [SAFETY.md](https://github.com/LxveAce/Suicide-Marauder/blob/main/docs/SAFETY.md) before enabling this.** The 2-fail wipe is real. Test in safe mode first. This is a defensive, owner-only measure for protecting your own hardware — not an attack tool.
 
 ---
 
@@ -121,15 +122,16 @@ That's it. The app reads the bundle manifest, verifies the SHA256 hash of every 
 
 ### Download (easiest)
 
-Grab a pre-built binary from the [Releases page](https://github.com/LxveAce/headless-marauder-gui/releases/latest) — no Python or Git needed:
+Grab a pre-built binary from the [latest release](https://github.com/LxveAce/headless-marauder-gui/releases/latest) — no Python or Git needed:
 
 | Platform | File | Notes |
 |----------|------|-------|
 | Windows x64 | `headless-marauder-vX.X.X-windows-x64.exe` | Double-click to run |
 | Linux x64 | `headless-marauder-vX.X.X-linux-x64` | `chmod +x` then run |
 | Linux ARM64 | `headless-marauder-vX.X.X-linux-arm64` | Raspberry Pi (64-bit OS), ARM SBCs |
+| macOS arm64 | `headless-marauder-vX.X.X-macos-arm64` | Apple Silicon (M-series) |
 
-Everything's bundled — Python, PyQt5, all dependencies. Download, run, plug in your ESP32.
+Everything's bundled — Python, PyQt5, all dependencies. Download, run, plug in your ESP32. (Replace `vX.X.X` with the latest version on the Releases page.)
 
 > The standalone builds include the Qt GUI only. For the TUI, browser UI, or dev work, install from source. Updates require downloading the new release (no in-app updater in standalone mode).
 >
@@ -195,7 +197,7 @@ Add `--mock` to try it without hardware, `--port /dev/tty.usbserial-xxxx` to spe
 pip install git+https://github.com/LxveAce/headless-marauder-gui.git[all]
 ```
 
-Gets you `headless-marauder-tk` and `headless-marauder-tui`. The Qt GUI needs to be run from a clone (`python -m gui_qt.app`) since Qt entry points can be finicky with pip.
+Gets you `headless-marauder-tk`, `headless-marauder-tui`, and `headless-marauder-web`. The Qt GUI needs to be run from a clone (`python -m gui_qt.app`) since Qt entry points can be finicky with pip.
 
 <details>
 <summary>Manual / dev run</summary>
@@ -267,7 +269,7 @@ Then delete the `headless-marauder-gui` folder.
 
 ### Browser UI
 
-Run `headless-marauder-web` (or `python web/app.py`) and open **http://localhost:5000**. Same features as the desktop GUIs — command sidebar, live console, AP/Station tables, parameter forms, auto-list, logging, keyboard shortcuts (`Ctrl+L` clear, `Ctrl+K` command box, `Ctrl+.` STOP). Raw input supports arrow-key history.
+Run `headless-marauder-web` (or `python web/app.py`) and open **http://localhost:5000**. Same features as the desktop GUIs — command sidebar, live console, AP/Station tables, parameter forms, auto-list, logging, the firmware flash panel (multi-firmware + Suicide build), and keyboard shortcuts (`Ctrl+L` clear, `Ctrl+K` command box, `Ctrl+.` STOP). Raw input supports arrow-key history.
 
 Binds to localhost only by default. Pass `--host 0.0.0.0` to open it up to your LAN (no auth — anyone on the network can control the board).
 
@@ -343,7 +345,7 @@ install.sh       Linux installer (app menu + PATH + venv)
 install.bat      Windows installer (Start Menu + PATH + venv)
 ```
 
-One command catalog and one parser feed all four front-ends. The serial layer streams to the UI, the parser, and the logger at the same time.
+One command catalog and one parser feed all four front-ends. The serial layer streams to the UI, the parser, and the logger at the same time. The `FirmwareProfile` registry in `flasher.py` keeps the Marauder and suicide flows byte-for-byte intact while adding the ESP32-DIV, Bruce, and custom profiles on top.
 
 ---
 
@@ -368,7 +370,7 @@ Also includes batch flash, firmware backup/restore, device auto-detection, offli
 
 The **ESP32-DIV** and **Bruce** firmwares (optional flash targets) include **RF features that may be illegal to operate** in your jurisdiction. This app only flashes the official images byte-for-byte — it adds, enables, and controls no extra functionality. What the firmware does once it's on the board is on you.
 
-The **suicide build** is an owner-only, **defensive** measure for protecting the data on your own device — not an attack tool. Provision and use it only on hardware you own, and read the Suicide-Marauder repo's **[SAFETY.md](https://github.com/LxveAce/Suicide-Marauder/blob/main/SAFETY.md)** before enabling it.
+The **suicide build** is an owner-only, **defensive** measure for protecting the data on your own device — not an attack tool. Provision and use it only on hardware you own, and read the Suicide-Marauder repo's **[SAFETY.md](https://github.com/LxveAce/Suicide-Marauder/blob/main/docs/SAFETY.md)** before enabling it.
 
 Provided "as is" with no warranty. See [DISCLAIMER.md](DISCLAIMER.md) for the full notice.
 
@@ -383,3 +385,10 @@ PRs and bug reports welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - Built with [pyserial](https://pyserial.readthedocs.io/), [PyQt5](https://www.riverbankcomputing.com/software/pyqt/), [Textual](https://textual.textualize.io/), [Flask](https://flask.palletsprojects.com/), and [esptool](https://github.com/espressif/esptool).
 
 [MIT License](LICENSE) | [Changelog](CHANGELOG.md)
+
+## Connect
+
+- **Discord:** [discord.gg/lxveace](https://discord.gg/lxveace) — questions, help, or to talk through this project
+- **GitHub:** [@LxveAce](https://github.com/LxveAce)
+- **Website:** [lxveace.com](https://lxveace.com)
+- **Project site:** [esp32marauder.com](https://esp32marauder.com)
