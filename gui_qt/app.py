@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QLineEdit, QComboBox, QPlainTextEdit, QTabWidget,
     QTableWidget, QTableWidgetItem, QGroupBox, QScrollArea, QSplitter, QDialog,
     QFormLayout, QCheckBox, QRadioButton, QFileDialog, QMessageBox, QAbstractItemView,
-    QHeaderView, QButtonGroup, QAction, QShortcut, QStatusBar, QTextBrowser,
+    QHeaderView, QButtonGroup, QAction, QShortcut, QSpinBox, QStatusBar, QTextBrowser,
 )
 
 from marauder_core import (
