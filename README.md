@@ -8,6 +8,27 @@
 
 ---
 
+<!-- STATUS-ROADMAP:START -->
+## Status & Roadmap
+
+**Status:** Production/Stable and shipping. Latest release is v1.3.2; `main` is a few commits ahead with build fixes queued for the next tag. All modules build cleanly and there are no open issues.
+
+**In progress / known issues:**
+- Cutting the next release (v1.3.3+) so the published binaries pick up recent build fixes that currently only live on `main`.
+- Aligning version strings to a single source of truth so the version shown in the app matches the released tag.
+- Correcting the documented `pip install ... [all]` command so the extras install reliably (use the PEP 508 form).
+- Catching the CHANGELOG up to the latest releases.
+- Ongoing security hardening: re-verifying the flasher's HTTPS-only allowlist / redirect defense, keeping the web UI bound to localhost by default, and back-porting the hardening checklist from the downstream cyber-controller flasher audit.
+
+**Roadmap:**
+- Add a `[project.scripts]` launch entry for the PyQt5 GUI so pip users can start the recommended front-end directly.
+- Declare the suicide-bundle provisioning dependency in a dedicated optional-dependencies group.
+- Single-source the version via `importlib.metadata` so it can't drift.
+- Track the Suicide-Marauder succession to **`deadmans-switch`** (firmware-agnostic; Guardian/Fork variants) and decide whether the flash path should follow it or stay pinned to the vendored bundle.
+<!-- STATUS-ROADMAP:END -->
+
+---
+
 ## What sets this apart
 
 Most Marauder UIs are browser-based and depend on the Web Serial API (Chromium only). On Kali that means Firefox doesn't work at all, and even in Chrome the feature set is limited.
