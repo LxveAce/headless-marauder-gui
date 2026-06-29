@@ -75,7 +75,7 @@
 - **Lineage (verified):** HMG is the ORIGINAL repo. Downstream: `universal-flasher` (`uf_core`, "built on the HMG scaffold"), `universal-flasher-ui` (frozen snapshot), and **`cyber-controller`** — the "flagship convergence" successor (HMG + universal-flasher + universal-flasher-ui + Dead Man's Switch; 21 firmware profiles / 5 backends / 9 protocol parsers; re-architected into `src/core` + `src/protocols`, did NOT vendor `marauder_core`). **Before adding multi-firmware/multi-device features to HMG, check whether the successor repos already solved it** to avoid duplicated effort.
 - **Branding chain:** `suicide/` provisioner → Suicide-Marauder repo → SUCCEEDED by `deadmans-switch` (firmware-agnostic; embedded as a cyber-controller git submodule).
 - **Distribution:** esp32marauder.com is up and fetches the latest release dynamically (no hardcoded version → won't go stale).
-- **Path note:** authoritative working clones are under `C:/Users/mmrla/repos` and `C:/Users/mmrla/Projects`; `CLAUDE-TRANSFER.md` still references an older machine path (`C:/Users/extra/...`).
+- **Path note:** authoritative working clones are under `<HOME>/repos` and `<HOME>/Projects`; `CLAUDE-TRANSFER.md` still references an older machine path (`<HOME>/...`).
 
 ## Open questions
 
