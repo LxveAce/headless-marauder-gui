@@ -2,6 +2,12 @@
 
 > Status: production-stable, public, shipping. Health: GREEN. Latest release v1.3.2 (2026-06-11); main is 7 commits ahead. All Python modules compile; no open issues. | Date: ____________
 
+> **CONTEXT (2026-06-29):** the flasher line is consolidating onto ONE shared flashing engine (extracted
+> from Cyber Controller's flash core into the universal-flasher repo; Cyber Controller consumes it as a
+> dependency). HMG is the lineage ancestor of that engine — the dig-deeper "diff `marauder_core/flasher.py`
+> vs cc flash_core" / "diff `marauder_core/` vs `uf_core/`" items below are informational input to that
+> consolidation, not standalone work. HMG itself stays as the Marauder-only standalone app.
+
 ## Where this stands
 
 **What it is.** headless-marauder-gui (HMG, owner LxveAce, MIT) is the original/foundational Python app of the Lxve ESP32 security toolchain: a native controller + multi-firmware flasher for headless ESP32 Marauder boards. A shared core (`marauder_core/`: serial controller, ~70-command catalog, parser, flasher, capture logger, self-updater) drives **four front-ends**: PyQt5 desktop (`gui_qt/app.py`, the primary + PyInstaller build entry), Tkinter (`gui/app.py`), Textual TUI (`tui/app.py`), and Flask+SocketIO web UI (`web/app.py`, binds 127.0.0.1:5000). A `suicide/` package provides the Suicide-Marauder bundle provisioner plus vendored firmware/docs.
