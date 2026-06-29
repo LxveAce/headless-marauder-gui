@@ -215,7 +215,7 @@ Add `--mock` to try it without hardware, `--port /dev/tty.usbserial-xxxx` to spe
 #### pip install
 
 ```bash
-pip install git+https://github.com/LxveAce/headless-marauder-gui.git[all]
+pip install "headless-marauder[all] @ git+https://github.com/LxveAce/headless-marauder-gui.git"
 ```
 
 Gets you `headless-marauder-tk`, `headless-marauder-tui`, and `headless-marauder-web`. The Qt GUI needs to be run from a clone (`python -m gui_qt.app`) since Qt entry points can be finicky with pip.
