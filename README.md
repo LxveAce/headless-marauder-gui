@@ -1,5 +1,7 @@
 # Headless Marauder
 
+> ⚠️ **Authorized, lawful use only.** A security-research tool — use it only on systems you own or have explicit permission to test. Provided as-is, no warranty; you assume all risk. See [DISCLAIMER.md](DISCLAIMER.md).
+
 **The all-in-one ESP32 Marauder controller and multi-firmware flasher.** Open source, cross-platform, one-click standalone exe — no Python, no browser, no cloud. Just download, run, and plug in your board.
 
 > Works with any ESP32 running Marauder firmware — headless boards (like a Lonely Binary "Gold" with an antenna and no screen) or screened devices (CYD, M5Stack, Flipper devboards). The "Gold" and most headless dev boards are **classic ESP32** (WROOM, CH340 USB-serial), not S3. A full-featured GUI for controlling and flashing ESP32 Marauder from a Raspberry Pi, laptop, or cyberdeck.
