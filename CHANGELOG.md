@@ -1,11 +1,37 @@
 # Changelog
 
+## [Unreleased]
+
+Not yet cut as a tagged release.
+
+**Changed:**
+- `marauder_core.__version__` is now single-sourced from the installed distribution metadata (with a hardcoded fallback for source / frozen builds), so it can't drift from `pyproject.toml` again.
+- README refreshed for accuracy; added a Status & Roadmap section, a Connect/contact section, and `FORWARD-PLAN.md` session-handoff notes.
+- Vendored Suicide-Marauder bundle synced to canonical (BootGate no longer telegraphs the locked state; guardcfg partition sizing fix so the gate activates; password-parity hardening; hardware-validated on CYD).
+
+**Docs:**
+- Added canonical `DISCLAIMER.md` (authorized lawful use, as-is / no-warranty / no-liability, not legal advice) and linked it from the README.
+- Scrubbed hardcoded local-session paths and personal-identity strings from public docs.
+
+## [1.3.2] — 2026-06-10
+
+- Synced the vendored Suicide-Marauder bundle to canonical: forensic overwrite-then-erase wipe and red-team round 3 (encryption-aware verify, resume convergence, factory/scratch coverage, RAM scrub).
+
+## [1.3.1] — 2026-06-10
+
+**New stuff:**
+- Suicide-build provisioner integrated into all four UIs (Qt, Tk, TUI, web).
+- macOS arm64 standalone build added to the release workflow.
+
+**Changed:**
+- README expanded with full feature coverage (command categories, BLE, GPS, flasher details, suicide-build docs) and a universal-flasher roadmap section pointing at the now-released [universal-flasher](https://github.com/LxveAce/universal-flasher).
+
 ## [1.3.0] — 2026-06-09
 
 Multi-firmware flasher, Suicide-build support, standalone builds, and security hardening.
 
 **New stuff:**
-- Multi-firmware flasher — profile-based flashing for ESP32Marauder, Evil Portal, Wi-Fi Nugget, and custom firmware. Each profile defines its own partition layout and support files.
+- Multi-firmware flasher — profile-based flashing for ESP32 Marauder, ESP32-DIV (cifertech), Bruce (pr3y), and any custom local `.bin`. Each `FirmwareProfile` defines its own partition layout, chip map, and support files.
 - Suicide-build flash path — dedicated `flash_suicide` flow for pre-provisioned Suicide-Marauder bundles with manifest validation and SHA256 integrity checks.
 - Standalone executables — PyInstaller-based Windows `.exe`, Linux x64, and Linux ARM64 binaries on the Releases page. No Python needed. Built automatically via GitHub Actions CI on each release.
 - `build.py` for local PyInstaller builds (`python build.py --onefile`)
@@ -76,6 +102,8 @@ Initial release.
 - `--mock` mode for dev/demo without hardware
 - MIT License
 
+[1.3.2]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.2
+[1.3.1]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.1
 [1.3.0]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.0
 [1.2.0]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.2.0
 [1.1.0]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.1.0
