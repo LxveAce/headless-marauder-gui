@@ -195,8 +195,46 @@ def _variant_label(name: str) -> str:
 # esptool plumbing  (shared by every profile)
 # --------------------------------------------------------------------------- #
 
+# Sentinel that flags an esptool re-exec of a FROZEN app binary (see esptool_argv /
+# run_esptool_entrypoint). Chosen to be something no real esptool subcommand starts with.
+_ESPTOOL_SENTINEL = "--__hmg_run_esptool__"
+
+
 def esptool_argv(*args: str) -> List[str]:
+    """Build the argv that runs esptool with `args`.
+
+    Source / pip installs run under a real Python interpreter, so `python -m esptool` works.
+    But in a PyInstaller build `sys.executable` is THIS app's exe (not a Python), so
+    `-m esptool` would silently re-launch the GUI and esptool would never run — breaking
+    esptool_available(), _detect_chip(), flash(), erase() and flash_suicide() in every shipped
+    binary. When frozen we instead re-exec the app exe with a sentinel that
+    run_esptool_entrypoint() intercepts at startup to run esptool's own CLI in-process, which
+    keeps _run_stream's line-streaming subprocess model intact.
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, _ESPTOOL_SENTINEL, *args]
     return [sys.executable, "-m", "esptool", *args]
+
+
+def run_esptool_entrypoint(argv: Optional[List[str]] = None) -> bool:
+    """Frozen-binary esptool trampoline: if this process was re-exec'd to run esptool, do so.
+
+    A PyInstaller build has no `python -m esptool`, so esptool_argv() re-execs the app exe with
+    `_ESPTOOL_SENTINEL` as argv[1]. This must be called FIRST in the frozen entrypoint (before
+    the GUI is imported): if the sentinel is present it delegates the remaining args to esptool's
+    own CLI (`esptool._main`, matching `python -m esptool` error handling / exit codes) and never
+    returns — it raises SystemExit with esptool's status. If the sentinel is absent it is a no-op
+    and returns False so the caller proceeds to launch normally.
+    """
+    argv = list(sys.argv if argv is None else argv)
+    if len(argv) < 2 or argv[1] != _ESPTOOL_SENTINEL:
+        return False
+    import esptool
+    # Present esptool a normal argv (drop our program name + sentinel) and hand off to its CLI
+    # entry so behavior matches `python -m esptool` exactly (FatalError -> exit 2, etc.).
+    sys.argv = [argv[0], *argv[2:]]
+    entry = getattr(esptool, "_main", None) or esptool.main
+    raise SystemExit(entry())
 
 
 def esptool_available() -> bool:

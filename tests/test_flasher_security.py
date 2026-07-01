@@ -146,3 +146,46 @@ def test_bruce_family(env, family):
 def test_esptool_argv_shape():
     argv = flasher.esptool_argv("version")
     assert argv[1:] == ["-m", "esptool", "version"]
+
+
+# --------------------------------------------------------------------------- #
+# Frozen-binary esptool trampoline (esptool_argv frozen branch + run_esptool_entrypoint)
+# --------------------------------------------------------------------------- #
+
+def test_esptool_argv_frozen_uses_sentinel(monkeypatch):
+    # Under PyInstaller `sys.executable` is the app exe, so `-m esptool` would re-launch the
+    # GUI. The frozen branch must instead re-exec the exe with the trampoline sentinel.
+    monkeypatch.setattr(flasher.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(flasher.sys, "executable", "/app/headless-marauder.exe", raising=False)
+    argv = flasher.esptool_argv("--chip", "esp32", "chip_id")
+    assert argv == ["/app/headless-marauder.exe", flasher._ESPTOOL_SENTINEL,
+                    "--chip", "esp32", "chip_id"]
+    # "-m esptool" must NOT appear in the frozen argv.
+    assert "-m" not in argv and "esptool" not in argv
+
+
+def test_run_esptool_entrypoint_noop_without_sentinel():
+    # A normal launch (no sentinel) is a no-op that returns False so the GUI proceeds.
+    assert flasher.run_esptool_entrypoint(["app.exe"]) is False
+    assert flasher.run_esptool_entrypoint(["app.exe", "--port", "COM5"]) is False
+
+
+def test_run_esptool_entrypoint_dispatches_to_esptool(monkeypatch):
+    # With the sentinel present it must strip the sentinel, hand the rest to esptool's CLI, and
+    # exit with esptool's status (never returning to the caller / GUI).
+    called = {}
+
+    def fake_main():
+        called["argv"] = list(flasher.sys.argv)
+        return 0
+
+    import esptool
+    monkeypatch.setattr(esptool, "_main", fake_main, raising=False)
+    monkeypatch.setattr(flasher.sys, "argv", ["app.exe"], raising=False)
+
+    argv = ["app.exe", flasher._ESPTOOL_SENTINEL, "--chip", "esp32", "chip_id"]
+    with pytest.raises(SystemExit) as exc:
+        flasher.run_esptool_entrypoint(argv)
+    assert exc.value.code == 0
+    # esptool saw a clean argv with the sentinel removed.
+    assert called["argv"] == ["app.exe", "--chip", "esp32", "chip_id"]
