@@ -20,15 +20,25 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont, QKeySequence
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QPushButton, QLabel, QLineEdit, QComboBox, QPlainTextEdit, QTabWidget,
-    QTableWidget, QTableWidgetItem, QGroupBox, QScrollArea, QSplitter, QDialog,
-    QFormLayout, QCheckBox, QRadioButton, QFileDialog, QMessageBox, QAbstractItemView,
-    QHeaderView, QButtonGroup, QAction, QShortcut, QStatusBar, QTextBrowser,
-)
+try:
+    from PyQt5.QtCore import Qt, QTimer
+    from PyQt5.QtGui import QFont, QKeySequence
+    from PyQt5.QtWidgets import (
+        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+        QPushButton, QLabel, QLineEdit, QComboBox, QPlainTextEdit, QTabWidget,
+        QTableWidget, QTableWidgetItem, QGroupBox, QScrollArea, QSplitter, QDialog,
+        QFormLayout, QCheckBox, QRadioButton, QFileDialog, QMessageBox, QAbstractItemView,
+        QHeaderView, QButtonGroup, QAction, QShortcut, QStatusBar, QTextBrowser,
+    )
+except ImportError as _e:  # PyQt5 not installed — give an actionable hint, not a raw traceback
+    sys.stderr.write(
+        "Headless Marauder (Qt GUI) needs PyQt5, which isn't installed.\n"
+        f"  ({_e})\n"
+        "Install it with:  pip install PyQt5\n"
+        "  (or: pip install 'headless-marauder[qt]')\n"
+        "No PyQt5? The Textual TUI needs no Qt:  headless-marauder-tui\n"
+    )
+    sys.exit(1)
 
 from marauder_core import (
     MarauderController, MarauderParser, CaptureLogger, commands, flasher, updater, __version__,
