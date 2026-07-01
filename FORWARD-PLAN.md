@@ -1,6 +1,6 @@
 # headless-marauder-gui - Forward Plan
 
-> Status: production-stable, public, shipping. Health: GREEN. Latest release v1.3.2 (2026-06-11); main is 7 commits ahead. All Python modules compile; no open issues. | Date: ____________
+> Status: production-stable, public, shipping. Health: green. Latest release **v1.3.3** (2026-07-01) — the ESP32-C5 brick fix (bootloader offset 0x2000) + version single-sourcing. All Python modules compile; no open issues. | Date: 2026-07-01
 
 > **CONTEXT (2026-06-29):** the flasher line is consolidating onto ONE shared flashing engine (extracted
 > from Cyber Controller's flash core into the universal-flasher repo; Cyber Controller consumes it as a
