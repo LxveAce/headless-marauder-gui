@@ -20,6 +20,14 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Frozen-binary esptool trampoline: when the flasher re-exec'd THIS exe to run esptool (a
+# PyInstaller build has no `python -m esptool`), dispatch to esptool and exit BEFORE importing
+# the Qt UI, so an esptool run needs neither PyQt5 nor a serial connection. No-op on a normal
+# launch and in source/pip runs (frozen is False). See marauder_core.flasher.esptool_argv.
+if getattr(sys, "frozen", False):
+    from marauder_core import flasher as _flasher
+    _flasher.run_esptool_entrypoint()
+
 try:
     from PyQt5.QtCore import Qt, QTimer
     from PyQt5.QtGui import QFont, QKeySequence
