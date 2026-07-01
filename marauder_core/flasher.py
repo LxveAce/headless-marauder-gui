@@ -128,6 +128,18 @@ IMAGE_MULTI = "multi-file-offsets"      # app .bin only; needs separate bootload
 # bootloader sits at 0x0 on S3 and the RISC-V parts, 0x1000 on classic ESP32 / S2
 _BOOTLOADER_0 = {"esp32s3", "esp32c2", "esp32c3", "esp32c6", "esp32c5", "esp32h2"}
 
+# ESP32-C5 (and P4/H4) put the 2nd-stage bootloader at 0x2000 — NOT 0x0 (S3 / other RISC-V) and NOT
+# 0x1000 (classic ESP32 / S2). Verified against esptool's BOOTLOADER_FLASH_OFFSET. Consulted FIRST, then
+# the _BOOTLOADER_0 rule, so C5's bootloader is never written to 0x0 (which would brick the board).
+_BOOTLOADER_OFFSET = {"esp32c5": "0x2000"}
+
+
+def _bootloader_offset(chip: str) -> str:
+    """Per-chip 2nd-stage bootloader flash offset (esptool-faithful)."""
+    if chip in _BOOTLOADER_OFFSET:
+        return _BOOTLOADER_OFFSET[chip]
+    return "0x0" if chip in _BOOTLOADER_0 else "0x1000"
+
 # FlashFiles dir that holds bootloader+partitions for each chip family
 _SUPPORT_DIR = {
     "esp32": "MarauderV4",
@@ -461,7 +473,7 @@ class MarauderProfile(FirmwareProfile):
         boot = _fetch_flashfile(f"{sdir}/{_BOOTLOADER_NAME}", os.path.join(cache, f"{chip}_bootloader.bin"), on_line)
         part = _fetch_flashfile(f"{sdir}/{_PARTITIONS_NAME}", os.path.join(cache, f"{chip}_partitions.bin"), on_line)
         bapp = _fetch_flashfile(_BOOT_APP0_PATH, os.path.join(cache, "boot_app0.bin"), on_line)
-        bl_off = "0x0" if chip in _BOOTLOADER_0 else "0x1000"
+        bl_off = _bootloader_offset(chip)
         return {bl_off: boot, "0x8000": part, "0xe000": bapp}
 
 
@@ -546,7 +558,7 @@ class Esp32DivProfile(FirmwareProfile):
         boot = _fetch_div_file(_DIV_BOOTLOADER, os.path.join(cache, f"div_{chip}_bootloader.bin"), on_line)
         part = _fetch_div_file(_DIV_PARTITIONS, os.path.join(cache, f"div_{chip}_partitions.bin"), on_line)
         bapp = _fetch_div_file(_DIV_BOOT_APP0, os.path.join(cache, "div_boot_app0.bin"), on_line)
-        bl_off = "0x0" if chip in _BOOTLOADER_0 else "0x1000"
+        bl_off = _bootloader_offset(chip)
         return {bl_off: boot, "0x8000": part, "0xe000": bapp}
 
     def app_offset(self, chip: str) -> str:
