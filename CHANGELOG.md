@@ -1,8 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.3] — 2026-07-01
 
-Not yet cut as a tagged release.
+**Fixed:**
+- **ESP32-C5 brick fix (critical).** The C5's 2nd-stage bootloader offset is `0x2000`, not `0x0`; the flasher
+  had grouped C5 with the `0x0`-bootloader chips, so a C5 full-flash wrote the bootloader to the wrong offset
+  and bricked the board (ROM-recoverable). Replaced the inline logic with an esptool-faithful
+  `_bootloader_offset()` SSOT helper + a regression test.
 
 **Changed:**
 - `marauder_core.__version__` is now single-sourced from the installed distribution metadata (with a hardcoded fallback for source / frozen builds), so it can't drift from `pyproject.toml` again.
