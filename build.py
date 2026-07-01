@@ -16,7 +16,6 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ICON = os.path.join(HERE, "assets", "icon.svg")
 
 HIDDEN_IMPORTS = [
     "marauder_core",

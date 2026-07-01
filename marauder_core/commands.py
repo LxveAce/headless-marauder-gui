@@ -1,7 +1,8 @@
 """
-Marauder serial command catalog — the single source of truth shared by the TUI and the web GUI.
+Marauder serial command catalog — the single source of truth shared by all four front-ends
+(PyQt5 GUI, Tkinter GUI, Textual TUI, and the web GUI).
 
-Data-driven on purpose: add a command here once and it shows up in BOTH front-ends.
+Data-driven on purpose: add a command here once and it shows up in EVERY front-end.
 Commands and flags are taken from the official ESP32 Marauder CLI:
   https://github.com/justcallmekoko/ESP32Marauder/wiki/cli
 Run `help` on the device to confirm the exact set for your firmware version.
