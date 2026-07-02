@@ -37,7 +37,9 @@ dependencies = [
 qt = ["PyQt5>=5.15"]
 tui = ["textual>=0.50"]
 web = ["flask>=3.0", "flask-socketio>=5.3"]
-all = ["PyQt5>=5.15", "textual>=0.50", "flask>=3.0", "flask-socketio>=5.3"]
+# NVS image generator for the suicide-build provisioner (not bundled with esptool).
+suicide = ["esp-idf-nvs-partition-gen==0.2.0"]
+all = ["PyQt5>=5.15", "textual>=0.50", "flask>=3.0", "flask-socketio>=5.3", "esp-idf-nvs-partition-gen==0.2.0"]
 test = ["pytest>=7.0"]
 
 [project.urls]
