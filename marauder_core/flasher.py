@@ -125,13 +125,13 @@ Line = Callable[[str], None]
 IMAGE_MERGED = "merged-single-bin"      # one .bin holds bootloader+partitions+app, flash at its offset
 IMAGE_MULTI = "multi-file-offsets"      # app .bin only; needs separate bootloader/partitions/boot_app0
 
-# bootloader sits at 0x0 on S3 and the RISC-V parts, 0x1000 on classic ESP32 / S2
-_BOOTLOADER_0 = {"esp32s3", "esp32c2", "esp32c3", "esp32c6", "esp32h2"}
+# bootloader sits at 0x0 on S3 and the RISC-V parts (C2/C3/C6/C61/H2), 0x1000 on classic ESP32 / S2
+_BOOTLOADER_0 = {"esp32s3", "esp32c2", "esp32c3", "esp32c6", "esp32c61", "esp32h2"}
 
-# ESP32-C5 (and P4/H4) put the 2nd-stage bootloader at 0x2000 — NOT 0x0 (S3 / other RISC-V) and NOT
+# ESP32-C5 / P4 / H4 put the 2nd-stage bootloader at 0x2000 — NOT 0x0 (S3 / other RISC-V) and NOT
 # 0x1000 (classic ESP32 / S2). Verified against esptool's BOOTLOADER_FLASH_OFFSET. Consulted FIRST, then
-# the _BOOTLOADER_0 rule, so C5's bootloader is never written to 0x0 (which would brick the board).
-_BOOTLOADER_OFFSET = {"esp32c5": "0x2000"}
+# the _BOOTLOADER_0 rule, so these bootloaders are never written to 0x0 (which would brick the board).
+_BOOTLOADER_OFFSET = {"esp32c5": "0x2000", "esp32p4": "0x2000", "esp32h4": "0x2000"}
 
 
 def _bootloader_offset(chip: str) -> str:

@@ -11,9 +11,17 @@ def test_c5_bootloader_is_0x2000_not_0x0():
     assert _bootloader_offset("esp32c5") == "0x2000"
 
 
+def test_p4_h4_bootloader_is_0x2000_not_0x0():
+    # P4 / H4 share the C5 gotcha; the old major-only map returned 0x1000 for them.
+    assert _bootloader_offset("esp32p4") == "0x2000"
+    assert _bootloader_offset("esp32h4") == "0x2000"
+
+
 def test_classic_and_s3_offsets_unchanged():
     assert _bootloader_offset("esp32") == "0x1000"
     assert _bootloader_offset("esp32s2") == "0x1000"
     assert _bootloader_offset("esp32s3") == "0x0"
+    assert _bootloader_offset("esp32c2") == "0x0"
     assert _bootloader_offset("esp32c3") == "0x0"
     assert _bootloader_offset("esp32c6") == "0x0"
+    assert _bootloader_offset("esp32c61") == "0x0"  # was 0x1000 before the fix
