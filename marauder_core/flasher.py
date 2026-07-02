@@ -126,7 +126,7 @@ IMAGE_MERGED = "merged-single-bin"      # one .bin holds bootloader+partitions+a
 IMAGE_MULTI = "multi-file-offsets"      # app .bin only; needs separate bootloader/partitions/boot_app0
 
 # bootloader sits at 0x0 on S3 and the RISC-V parts, 0x1000 on classic ESP32 / S2
-_BOOTLOADER_0 = {"esp32s3", "esp32c2", "esp32c3", "esp32c6", "esp32c5", "esp32h2"}
+_BOOTLOADER_0 = {"esp32s3", "esp32c2", "esp32c3", "esp32c6", "esp32h2"}
 
 # ESP32-C5 (and P4/H4) put the 2nd-stage bootloader at 0x2000 — NOT 0x0 (S3 / other RISC-V) and NOT
 # 0x1000 (classic ESP32 / S2). Verified against esptool's BOOTLOADER_FLASH_OFFSET. Consulted FIRST, then
