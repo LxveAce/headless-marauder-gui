@@ -24,7 +24,6 @@
 
 **Roadmap:**
 - Add a `[project.scripts]` launch entry for the PyQt5 GUI so pip users can start the recommended front-end directly.
-- Declare the suicide-bundle provisioning dependency in a dedicated optional-dependencies group.
 - Single-source the version via `importlib.metadata` so it can't drift.
 - Track the Suicide-Marauder succession to **`deadmans-switch`** (firmware-agnostic; Guardian/Fork variants) and decide whether the flash path should follow it or stay pinned to the vendored bundle.
 <!-- STATUS-ROADMAP:END -->
@@ -221,6 +220,8 @@ pip install "headless-marauder[all] @ git+https://github.com/LxveAce/headless-ma
 ```
 
 Gets you `headless-marauder-tk`, `headless-marauder-tui`, and `headless-marauder-web`. The Qt GUI needs to be run from a clone (`python -m gui_qt.app`) since Qt entry points can be finicky with pip.
+
+To provision **suicide bundles** (adds `esp-idf-nvs-partition-gen`, the NVS image generator the provisioner needs and which esptool doesn't bundle), install the `suicide` extra — from a clone, `pip install .[suicide]` (quote as `'.[suicide]'` in zsh). The `[all]` install above already includes it.
 
 <details>
 <summary>Manual / dev run</summary>
