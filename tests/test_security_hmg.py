@@ -50,3 +50,18 @@ def test_web_cors_allowlist_tracks_custom_host_port():
     origins = webapp._allowed_origins("192.168.1.50", 8080)
     assert "http://192.168.1.50:8080" in origins
     assert all(o != "*" for o in origins)
+
+
+# ── HMG-D3: the esptool busy claim is atomic (fixes the check-then-set race) ──
+def test_web_acquire_flash_is_exclusive():
+    """detect/flash/suicide/erase share one serial port; the claim must be mutually exclusive so two
+    tabs firing at once can't both pass a check-then-set and drive two esptools onto the same port."""
+    webapp = pytest.importorskip("web.app")
+    webapp._flash_busy = False
+    try:
+        assert webapp._acquire_flash() is True
+        assert webapp._acquire_flash() is False      # already claimed — a 2nd tab can't also pass
+        webapp._release_flash()
+        assert webapp._acquire_flash() is True        # released → claimable again
+    finally:
+        webapp._release_flash()
