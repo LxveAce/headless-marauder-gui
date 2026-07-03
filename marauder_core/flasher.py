@@ -49,6 +49,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -206,12 +207,14 @@ def esptool_available() -> bool:
         return False
 
 
-def _run_stream(argv: List[str], on_line: Line) -> int:
+def _run_stream(argv: List[str], on_line: Line, timeout: Optional[float] = None) -> int:
     """Run a command, stream combined stdout/stderr line-by-line, return exit code.
 
-    On any exception mid-stream (e.g. the UI callback raises because a dialog closed), the
-    child is killed and reaped so it can't keep holding the serial port — otherwise the next
-    flash fails with 'port busy'.
+    The child is ALWAYS killed and reaped if it's still alive when we leave — whether a UI callback
+    raised (Exception), a KeyboardInterrupt/BaseException unwound past the handler (a Ctrl-C abort of a
+    slow flash), or an optional `timeout` watchdog fired — so it can't keep holding the serial port (the
+    next flash would fail with 'port busy'). `timeout` (seconds) bounds a call that might otherwise wedge,
+    e.g. chip detection on a silent port; leave it None for the flash paths so their behavior is unchanged.
     """
     on_line("$ " + " ".join(argv))
     try:
@@ -220,19 +223,39 @@ def _run_stream(argv: List[str], on_line: Line) -> int:
     except FileNotFoundError as e:
         on_line(f"[error] {e}")
         return 127
+
+    timer: Optional[threading.Timer] = None
+    if timeout is not None:
+        def _kill_on_timeout() -> None:
+            if proc.poll() is None:
+                on_line(f"[error] timed out after {timeout:.0f}s — killing the process")
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        timer = threading.Timer(timeout, _kill_on_timeout)
+        timer.daemon = True
+        timer.start()
+
     try:
         for line in proc.stdout:                   # type: ignore[union-attr]
             on_line(line.rstrip("\n"))
         proc.wait()
     except Exception as e:
         on_line(f"[error] {e}")
-        try:
-            proc.kill()
-            proc.wait(timeout=5)
-        except Exception:
-            pass
         return -1
     finally:
+        if timer is not None:
+            timer.cancel()
+        # Guard on poll(): the normal path already reaped via wait(), so this is a no-op there; it only
+        # fires when the child is still alive — a mid-stream Exception, a BaseException/Ctrl-C unwinding
+        # past the handler, or a timeout kill not yet reaped.
+        if proc.poll() is None:
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
         try:
             if proc.stdout:
                 proc.stdout.close()
@@ -252,7 +275,9 @@ def _detect_chip(port: str, on_line: Line) -> Optional[str]:
         out_lines.append(s)
         on_line(s)
 
-    _run_stream(argv, cap)
+    # Bound the probe: esptool chip_id normally connects in a few seconds, but a wedged board or a
+    # serial adapter that never yields EOF can leave it waiting — don't hang the caller thread.
+    _run_stream(argv, cap, timeout=30)
     text = "\n".join(out_lines)
     for token, chip in (("ESP32-S3", "esp32s3"), ("ESP32-S2", "esp32s2"),
                         ("ESP32-C6", "esp32c6"), ("ESP32-C5", "esp32c5"),
