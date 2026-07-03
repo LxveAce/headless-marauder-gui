@@ -31,6 +31,17 @@ def _allowed_origins(host: str = "127.0.0.1", port: int = 5000) -> list:
     return [f"http://{h}:{port}" for h in sorted(hosts)]
 
 
+# Hosts that keep the UI on this machine only. Binding anywhere else serves the flasher — which can
+# flash/ERASE the connected board and read local files chosen as a firmware source — to other hosts,
+# and there is no per-user login, so the operator must be warned explicitly before exposing it.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", ""})
+
+
+def _is_public_bind(host: str) -> bool:
+    """True if `host` exposes the UI beyond this machine (0.0.0.0, a LAN IP, or a hostname)."""
+    return (host or "").strip().lower() not in _LOOPBACK_HOSTS
+
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.urandom(24)
 socketio = SocketIO(app, cors_allowed_origins=_allowed_origins(), async_mode="threading")
@@ -216,6 +227,15 @@ def on_clear_tables():
 def on_toggle_log(data):
     if data.get("enabled"):
         log_dir = data.get("dir") or logger.dir
+        # Containment: `dir` is client-supplied, and logger.start() does os.makedirs + open() on it —
+        # so without this a socket client (a LAN peer under --host 0.0.0.0) could create a directory and
+        # write a capture log anywhere the process can write. Confine it under the user's home (where the
+        # default marauder-logs dir already lives) and reject anything that escapes.
+        real = os.path.realpath(log_dir)
+        home = os.path.realpath(os.path.expanduser("~"))
+        if real != home and not real.startswith(home + os.sep):
+            emit("log_status", {"enabled": False, "error": "Log directory must be under your home folder"})
+            return
         logger.set_dir(log_dir)
         path = logger.start()
         emit("log_status", {"enabled": True, "path": path})
@@ -537,6 +557,12 @@ def main():
 
     print(f"\n  Headless Marauder v{__version__} — Browser UI")
     print(f"  Open http://{args.host}:{args.web_port} in your browser\n")
+
+    if _is_public_bind(args.host):
+        print(f"  [!] SECURITY WARNING: --host {args.host} exposes this flasher beyond this machine.")
+        print("      Anyone who can reach this URL can flash or ERASE the connected board and read")
+        print("      local files you select as firmware — there is no per-user login. Only do this on")
+        print("      a trusted network; use the default --host 127.0.0.1 to stay local-only.\n")
 
     # Re-pin the WebSocket Origin allowlist to the ACTUAL bind host/port (the module-level default assumed
     # 127.0.0.1:5000) so a custom --host/--web-port still connects while cross-site origins stay blocked.
