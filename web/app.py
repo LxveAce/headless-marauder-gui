@@ -7,14 +7,13 @@ desktop and terminal UIs.
 """
 
 import argparse
-import json
 import os
 import sys
 import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify
 from flask_socketio import SocketIO, emit
 
 from marauder_core import MarauderController, MarauderParser, CaptureLogger, __version__

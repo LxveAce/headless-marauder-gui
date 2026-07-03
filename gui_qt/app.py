@@ -26,7 +26,7 @@ try:
     from PyQt5.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
         QPushButton, QLabel, QLineEdit, QComboBox, QPlainTextEdit, QTabWidget,
-        QTableWidget, QTableWidgetItem, QGroupBox, QScrollArea, QSplitter, QDialog,
+        QTableWidget, QTableWidgetItem, QGroupBox, QScrollArea, QSpinBox, QSplitter, QDialog,
         QFormLayout, QCheckBox, QRadioButton, QFileDialog, QMessageBox, QAbstractItemView,
         QHeaderView, QButtonGroup, QAction, QShortcut, QStatusBar, QTextBrowser,
     )
