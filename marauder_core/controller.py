@@ -21,6 +21,11 @@ except Exception:  # pyserial not installed yet
 
 _CH340_HINTS = ("ch340", "ch341", "cp210", "qinheng", "silicon labs", "wch", "usb-serial", "usb serial")
 
+# Upper bound on an un-terminated read buffer. A well-behaved Marauder emits newline-terminated lines; a
+# device streaming bytes with no '\n' (garbage / wrong baud / hostile firmware) must not grow the buffer
+# without bound.
+_MAX_LINE_BYTES = 64 * 1024
+
 
 class MarauderController:
     def __init__(self, port: Optional[str] = None, baud: int = 115200, mock: bool = False):
@@ -70,6 +75,11 @@ class MarauderController:
 
     # --- lifecycle -------------------------------------------------------- #
     def connect(self) -> str:
+        # Guard against connect-while-connected: without this, a second connect() overwrites self.ser
+        # (leaking the old handle → the port stays busy) and starts a SECOND reader thread on the same
+        # port, so two loops split the incoming bytes and corrupt line framing. Tear the old one down first.
+        if self._running or self.ser is not None:
+            self.disconnect()
         if self.mock:
             self.port = self.port or "MOCK"
             self._start_reader()
@@ -86,7 +96,11 @@ class MarauderController:
                 "No serial port found. Plug the board in and check /dev/ttyUSB* "
                 "(see headless-on-kali troubleshooting: brltty / dialout / cable)."
             )
-        self.ser = serial.Serial(self.port, self.baud, timeout=0.2)
+        # write_timeout matters as much as the read timeout: without it (pyserial defaults to None = block
+        # forever) a wedged/flow-controlled device makes ser.write() hang the calling thread — and send()
+        # runs on the Qt UI thread and web handler threads, so that would freeze the whole UI while holding
+        # _write_lock. Bound it and surface a SerialTimeoutException instead (see send()).
+        self.ser = serial.Serial(self.port, self.baud, timeout=0.2, write_timeout=2.0)
         self._start_reader()
         return self.port
 
@@ -115,6 +129,11 @@ class MarauderController:
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     self._emit(line.decode("utf-8", "replace").rstrip("\r"))
+                # Never let a newline-less stream grow the buffer without bound: flush the oversized
+                # partial line and reset so a missing terminator can't exhaust memory.
+                if len(buf) > _MAX_LINE_BYTES:
+                    self._emit(buf.decode("utf-8", "replace").rstrip("\r"))
+                    buf = b""
 
     def disconnect(self):
         self._running = False
@@ -162,7 +181,11 @@ class MarauderController:
             self._emit("[error] not connected")
             return
         with self._write_lock:
-            self.ser.write((command + "\n").encode())
+            try:
+                self.ser.write((command + "\n").encode())
+            except serial.SerialTimeoutException:
+                self._emit("[error] serial write timed out — the device isn't accepting data "
+                           "(unplugged, wedged, or stuck in flow control?)")
 
     def stop(self):
         """Send the universal stop."""
