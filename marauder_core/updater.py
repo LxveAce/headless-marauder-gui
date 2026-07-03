@@ -9,6 +9,7 @@ shipped product. Streams output through an on_line callback like the flasher.
 import os
 import subprocess
 import sys
+import threading
 from typing import Callable
 
 Line = Callable[[str], None]
@@ -47,30 +48,45 @@ def _run(argv, on_line: Line, env=None, timeout=180) -> int:
     except FileNotFoundError as e:
         on_line(f"[error] {e}")
         return 127
+    # `for ln in p.stdout` blocks until EOF, so the p.wait(timeout) below is only reached AFTER the
+    # child closes stdout. A TCP-stalled `git pull` that hangs with the socket open never closes
+    # stdout, so without this watchdog the read (and the update thread) would block forever and the
+    # timeout would never fire. A daemon Timer kills the child on expiry, which ends the read loop.
+    timed_out = {"v": False}
+
+    def _kill_on_timeout():
+        timed_out["v"] = True
+        try:
+            if p.poll() is None:
+                p.kill()
+        except Exception:
+            pass
+
+    watchdog = threading.Timer(timeout, _kill_on_timeout)
+    watchdog.daemon = True
+    watchdog.start()
     try:
         for ln in p.stdout:                   # type: ignore[union-attr]
             on_line(ln.rstrip("\n"))
-        p.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        on_line("[error] timed out — killing")
-        try:
-            p.kill(); p.wait(timeout=5)
-        except Exception:
-            pass
-        return -1
+        p.wait(timeout=5)                     # stdout hit EOF; the child should exit promptly now
     except Exception as e:
         on_line(f"[error] {e}")
         try:
-            p.kill(); p.wait(timeout=5)
+            if p.poll() is None:
+                p.kill(); p.wait(timeout=5)
         except Exception:
             pass
         return -1
     finally:
+        watchdog.cancel()
         try:
             if p.stdout:
                 p.stdout.close()
         except Exception:
             pass
+    if timed_out["v"]:
+        on_line("[error] timed out — killed")
+        return -1
     return p.returncode
 
 

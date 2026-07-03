@@ -50,6 +50,10 @@ class CaptureLogger:
             self.start()
 
     def start(self, stamp: Optional[str] = None) -> str:
+        # Close any session already open before starting a new one — otherwise the previous file
+        # handle leaks (and on Windows the old log stays locked, so it can't be moved/deleted).
+        if self._fp is not None:
+            self.stop()
         os.makedirs(self.dir, exist_ok=True)
         self.session = stamp or time.strftime("%Y%m%d-%H%M%S")
         self._serial_path = os.path.join(self.dir, f"serial-{self.session}.log")
