@@ -27,6 +27,33 @@ def test_send_reports_write_timeout(monkeypatch):
     assert any("timed out" in ln for ln in lines)
 
 
+# ── send() survives a concurrent disconnect closing/nulling the port ───────
+def test_send_survives_port_closed_by_concurrent_disconnect():
+    """A disconnect() on another thread can close the port between send()'s check and its write. send()
+    must surface that as an error, never let a SerialException escape uncaught onto the send thread."""
+    ctrl = MarauderController(port="COMX", mock=False)
+    lines = []
+    ctrl.subscribe(lines.append)
+
+    class _ClosedSer:
+        def write(self, _b):
+            raise serial.SerialException("Attempting to use a port that is not open")
+
+    ctrl.ser = _ClosedSer()
+    ctrl.send("scanap")   # before the fix, SerialException (not a Timeout) escaped uncaught
+    assert any("write failed" in ln for ln in lines)
+
+
+def test_send_when_port_nulled_is_clean():
+    """self.ser nulled by a concurrent disconnect → a clean 'not connected', never None.write."""
+    ctrl = MarauderController(port="COMX", mock=False)
+    lines = []
+    ctrl.subscribe(lines.append)
+    ctrl.ser = None
+    ctrl.send("scanap")
+    assert any("not connected" in ln for ln in lines)
+
+
 # ── HMG-C2: connect() while connected tears down the old session first ─────
 def test_connect_while_connected_disconnects_first(monkeypatch):
     ctrl = MarauderController(mock=True)

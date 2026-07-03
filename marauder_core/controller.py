@@ -177,15 +177,24 @@ class MarauderController:
         if self.mock:
             self._emit(f"[mock] would send: {command}")
             return
-        if not self.ser:
-            self._emit("[error] not connected")
-            return
+        # Snapshot the handle INSIDE the lock. send() runs on the Qt UI thread AND web handler threads,
+        # so a concurrent disconnect() (another thread) can null/close self.ser between a bare pre-check
+        # and the write — dereferencing None (AttributeError) or writing an already-closed port
+        # (SerialException). Take a local handle under the lock and treat a missing/closed port as a
+        # clean "not connected" / error instead of letting an exception escape onto the send thread.
         with self._write_lock:
+            ser = self.ser
+            if ser is None:
+                self._emit("[error] not connected")
+                return
             try:
-                self.ser.write((command + "\n").encode())
+                ser.write((command + "\n").encode())
             except serial.SerialTimeoutException:
                 self._emit("[error] serial write timed out — the device isn't accepting data "
                            "(unplugged, wedged, or stuck in flow control?)")
+            except (serial.SerialException, OSError) as e:
+                # a disconnect() on another thread closed the port between our snapshot and the write
+                self._emit(f"[error] serial write failed: {e}")
 
     def stop(self):
         """Send the universal stop."""
