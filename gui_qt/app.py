@@ -121,6 +121,21 @@ QLabel#status_bad { color: #ff4d4d; }
 
 
 # --------------------------------------------------------------------------- #
+# Upper bound on rows rendered into the AP/Station tables. The parser retains every distinct BSSID it
+# sees, so a dense environment — or a malfunctioning/hostile device streaming unique BSSIDs (the Marauder
+# can itself run beacon spam) — can grow the row set without bound, and rebuilding the whole QTableWidget
+# every 700ms would bog the UI. Only the on-screen render is capped: the tab title keeps the TRUE total
+# and snapshots log the full set. (The Textual TUI caps its display the same way.)
+_MAX_TABLE_ROWS = 500
+
+
+def _cap_table_rows(rows):
+    """Bound how many rows a table renders (see _MAX_TABLE_ROWS): rows unchanged when within the cap,
+    else the first _MAX_TABLE_ROWS. Only the render is bounded — the caller keeps the full list for the
+    tab-title count and for snapshot logging."""
+    return rows if len(rows) <= _MAX_TABLE_ROWS else rows[:_MAX_TABLE_ROWS]
+
+
 class ParamDialog(QDialog):
     def __init__(self, parent, cmd):
         super().__init__(parent)
@@ -1218,15 +1233,17 @@ class MainWindow(QMainWindow):
             return
         self.parser.dirty = False
         aps = self.parser.ap_rows()
-        self.ap_table.setRowCount(len(aps))
-        for r, a in enumerate(aps):
+        shown_aps = _cap_table_rows(aps)               # bound the render; title/snapshots keep the full set
+        self.ap_table.setRowCount(len(shown_aps))
+        for r, a in enumerate(shown_aps):
             idx = a.index if a.index >= 0 else ""
             for c, val in enumerate([idx, a.ssid, a.channel, a.rssi, a.bssid]):
                 self.ap_table.setItem(r, c, QTableWidgetItem(str(val)))
         self.tabs.setTabText(1, f"Access Points ({len(aps)})")
         stas = self.parser.station_rows()
-        self.sta_table.setRowCount(len(stas))
-        for r, s in enumerate(stas):
+        shown_stas = _cap_table_rows(stas)
+        self.sta_table.setRowCount(len(shown_stas))
+        for r, s in enumerate(shown_stas):
             idx = s.index if s.index >= 0 else ""
             for c, val in enumerate([idx, s.mac, s.ap_bssid, s.rssi]):
                 self.sta_table.setItem(r, c, QTableWidgetItem(str(val)))
