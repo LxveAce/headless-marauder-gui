@@ -148,6 +148,12 @@ class MarauderController:
         command = (command or "").strip()
         if not command:
             return
+        # Defense in depth against serial-command injection: an embedded CR/LF is a SECOND command to the
+        # device (newline is its separator). commands.build() already sanitizes param values, but refuse
+        # here too so no caller can smuggle a second command past .strip() (which only trims the ends).
+        if "\n" in command or "\r" in command:
+            self._emit("[error] refusing to send a command containing an embedded newline")
+            return
         self._emit(f">> {command}")
         if self.mock:
             self._emit(f"[mock] would send: {command}")

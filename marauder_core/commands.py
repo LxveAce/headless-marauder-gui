@@ -36,6 +36,18 @@ class Command:
     longrunning: bool = False       # scans/sniffs — remind the user about `stopscan`
 
 
+def _sanitize_value(v: Any) -> str:
+    """Neutralize serial-command injection in a user-supplied param value.
+
+    The Marauder treats a newline as a command separator, so a value like ``Free_WiFi\\nreboot`` reaching
+    a raw ``ssid -a -n <value>`` would smuggle a second command (``reboot``) — and the web UI passes
+    client-supplied values straight into :func:`build`. Replace every C0 control char (incl. CR/LF/TAB)
+    and DEL with a space so the value can only ever be a single argument. Printable ASCII and any
+    non-ASCII (e.g. an accented SSID) are preserved.
+    """
+    return "".join(" " if (ch < " " or ch == "\x7f") else ch for ch in str(v))
+
+
 def build(cmd: Command, values: Optional[Dict[str, Any]] = None) -> str:
     """Turn a Command + user values into the exact serial string to send."""
     values = values or {}
@@ -48,7 +60,8 @@ def build(cmd: Command, values: Optional[Dict[str, Any]] = None) -> str:
             continue
         if v in (None, ""):
             continue
-        token = f"{p.flag} {v}" if p.flag else str(v)
+        v = _sanitize_value(v)
+        token = f"{p.flag} {v}" if p.flag else v
         parts.append(token)
     return " ".join(str(x) for x in parts).strip()
 

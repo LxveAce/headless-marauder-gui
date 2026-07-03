@@ -19,9 +19,21 @@ from flask_socketio import SocketIO, emit
 from marauder_core import MarauderController, MarauderParser, CaptureLogger, __version__
 from marauder_core import commands, flasher
 
+def _allowed_origins(host: str = "127.0.0.1", port: int = 5000) -> list:
+    """Same-origin allowlist for the browser UI.
+
+    Pinning this (instead of ``"*"``) restores Socket.IO's Origin check, which blocks cross-site
+    WebSocket hijacking: with ``"*"`` any web page the user visits while this app runs could open a
+    socket to localhost and emit device-destructive events (flash / erase / raw send). Covers the
+    loopback aliases plus the configured bind host so the local UI still connects.
+    """
+    hosts = {host, "127.0.0.1", "localhost"}
+    return [f"http://{h}:{port}" for h in sorted(hosts)]
+
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.urandom(24)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(app, cors_allowed_origins=_allowed_origins(), async_mode="threading")
 
 ctrl = None
 parser = MarauderParser()
@@ -254,15 +266,27 @@ def _run_flash_task(fn):
 
 @socketio.on("flash_detect")
 def on_flash_detect(data):
+    global _flash_busy
     port = data.get("port", "")
     if not port:
         emit("flash_status", {"error": "No port specified"})
         return
+    # Detect drives esptool chip_id, which needs exclusive access to the serial port. Share the same
+    # busy guard as flash/erase (so a detect and a flash can't run two esptools on one port), and free
+    # our own serial handle first — otherwise esptool can't open the port and detect always fails 'port
+    # busy' while connected (every other flasher handler already frees the port first).
+    if _flash_busy:
+        emit("flash_status", {"error": "A flash/erase is already in progress."})
+        return
+    _flash_busy = True
     try:
+        _free_serial()
         chip = flasher.detect_chip(port, _flash_line)
         emit("flash_status", {"chip": chip})
     except Exception as e:
         emit("flash_status", {"error": str(e)})
+    finally:
+        _flash_busy = False
 
 
 @socketio.on("flash_releases")
@@ -493,6 +517,10 @@ def main():
     print(f"\n  Headless Marauder v{__version__} — Browser UI")
     print(f"  Open http://{args.host}:{args.web_port} in your browser\n")
 
+    # Re-pin the WebSocket Origin allowlist to the ACTUAL bind host/port (the module-level default assumed
+    # 127.0.0.1:5000) so a custom --host/--web-port still connects while cross-site origins stay blocked.
+    socketio.init_app(app, cors_allowed_origins=_allowed_origins(args.host, args.web_port),
+                      async_mode="threading")
     socketio.run(app, host=args.host, port=args.web_port, debug=False,
                  allow_unsafe_werkzeug=True)
 
