@@ -1001,7 +1001,11 @@ class MainWindow(QMainWindow):
             dlg = ParamDialog(self, cmd)
             if dlg.exec_() != QDialog.Accepted or dlg.values is None:
                 return
-            line = commands.build(cmd, dlg.values)
+            try:
+                line = commands.build(cmd, dlg.values)
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid input", str(e))
+                return
         else:
             line = cmd.base
         self._guarded_send(line)

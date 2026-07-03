@@ -171,8 +171,12 @@ def on_send(data):
     elif cmd_id:
         cmd = commands.get(cmd_id)
         if cmd:
-            built = commands.build(cmd, values)
-            ctrl.send(built)
+            try:
+                built = commands.build(cmd, values)
+            except ValueError as e:
+                emit("serial", {"line": f"[error] {e}"})
+            else:
+                ctrl.send(built)
         else:
             emit("serial", {"line": f"[error] unknown command: {cmd_id}"})
 

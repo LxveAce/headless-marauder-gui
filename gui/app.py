@@ -284,7 +284,11 @@ class MarauderGUI(tk.Tk):
             self.wait_window(dlg)
             if dlg.result is None:
                 return
-            line = commands.build(cmd, dlg.result)
+            try:
+                line = commands.build(cmd, dlg.result)
+            except ValueError as e:
+                messagebox.showwarning("Invalid input", str(e), parent=self)
+                return
         else:
             line = cmd.base
         self._guarded_send(line)

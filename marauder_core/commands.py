@@ -59,7 +59,19 @@ def build(cmd: Command, values: Optional[Dict[str, Any]] = None) -> str:
                 parts.append(p.flag)
             continue
         if v in (None, ""):
+            # A missing required value used to be dropped silently, yielding an incomplete command
+            # (e.g. `join -a` with no index). Refuse it. The GUIs pre-validate this in their param
+            # dialogs; the web path passes untrusted client values straight in, so this is its guard.
+            if p.required:
+                raise ValueError(f"'{p.name}' is required.")
             continue
+        if p.kind == "int":
+            try:
+                v = int(str(v).strip())
+            except (TypeError, ValueError):
+                raise ValueError(f"'{p.name}' must be a whole number (got {v!r}).")
+        if p.choices and str(v) not in p.choices:
+            raise ValueError(f"'{p.name}' must be one of {p.choices} (got {v!r}).")
         v = _sanitize_value(v)
         token = f"{p.flag} {v}" if p.flag else v
         parts.append(token)
