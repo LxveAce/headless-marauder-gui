@@ -103,6 +103,33 @@ def test_safe_bundle_join_rejects_escape(tmp_path, name):
         flasher._safe_bundle_join(str(tmp_path), name)
 
 
+# read_bundle_manifest must reject an offset that is present but UNPARSEABLE (not just a missing one),
+# so a malformed manifest fails fast here instead of at _bundle_offset() mid-flash-prep.
+def _write_bundle(tmp_path, files):
+    import json
+    (tmp_path / "bundle.json").write_text(json.dumps({"files": files}), encoding="utf-8")
+    return str(tmp_path)
+
+
+def test_read_bundle_manifest_accepts_parseable_offsets(tmp_path):
+    d = _write_bundle(tmp_path, [
+        {"file": "app.bin", "offset_hex": "0x10000"},
+        {"file": "boot.bin", "offset": 4096},
+    ])
+    assert len(flasher.read_bundle_manifest(d)["files"]) == 2
+
+
+@pytest.mark.parametrize("bad", [
+    {"file": "app.bin", "offset_hex": "0xZZ"},       # not valid hex
+    {"file": "app.bin", "offset_hex": "garbage"},
+    {"file": "app.bin", "offset": "not-a-number"},   # non-numeric decimal offset
+])
+def test_read_bundle_manifest_rejects_unparseable_offset(tmp_path, bad):
+    d = _write_bundle(tmp_path, [bad])
+    with pytest.raises(ValueError, match="offset"):
+        flasher.read_bundle_manifest(d)
+
+
 # --------------------------------------------------------------------------- #
 # Pure chip/variant mapping helpers
 # --------------------------------------------------------------------------- #

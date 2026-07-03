@@ -917,6 +917,15 @@ def read_bundle_manifest(bundle_dir: str) -> Dict:
             _safe_bundle_join(bundle_dir, entry["file"])
         except ValueError as e:
             raise ValueError(f'bundle.json "files"[{i}] has an unsafe file name: {e}')
+        # Validate the offset actually PARSES to an int now (offset_hex like "0x10000", or an int
+        # "offset") — the presence check above only confirms one is set. Without this, a malformed
+        # offset (e.g. "0xZZ") slips past read_bundle_manifest as "valid" and only blows up later at
+        # _bundle_offset() mid-flash-prep with a raw int() error. Reject it here with a clear per-entry
+        # message so the function honors its contract: raise ValueError on ANY malformed manifest.
+        try:
+            _bundle_offset(entry)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f'bundle.json "files"[{i}] has an unparseable offset: {e}')
     return manifest
 
 
