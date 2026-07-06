@@ -416,3 +416,8 @@ PRs and bug reports welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - **GitHub:** [@LxveAce](https://github.com/LxveAce)
 - **Website:** [lxveace.com](https://lxveace.com)
 - **Project site:** [esp32marauder.com](https://esp32marauder.com)
+---
+
+### Built by LxveLabs
+
+A **LxveLabs** project by LxveAce — hardware & security tools. LxveLabs is developing custom multi-radio ESP32 hardware in collaboration with [PCBWay](https://www.pcbway.com). More at [github.com/LxveAce](https://github.com/LxveAce).
