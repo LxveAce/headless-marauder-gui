@@ -18,7 +18,7 @@
 **Status:** Production/Stable and shipping. Latest release is **v1.3.4** (flasher-panel crash fix + remote web-security hardening). All modules build cleanly and there are no open issues.
 
 **In progress / known issues:**
-- _Resolved in v1.3.4: release cut so published binaries include the fixes; version single-sourced; the `pip install ... [all]` command uses the PEP 508 form; CHANGELOG caught up._
+- _Resolved in v1.3.4: release cut so published binaries include the fixes._
 - Ongoing security hardening: re-verifying the flasher's HTTPS-only allowlist / redirect defense, keeping the web UI bound to localhost by default, and back-porting the hardening checklist from the downstream cyber-controller flasher audit.
 
 **Roadmap:**

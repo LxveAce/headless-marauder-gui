@@ -127,6 +127,7 @@ Initial release.
 - `--mock` mode for dev/demo without hardware
 - MIT License
 
+[1.3.3]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.3
 [1.3.2]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.2
 [1.3.1]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.1
 [1.3.0]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.0

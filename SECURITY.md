@@ -1,6 +1,6 @@
 # Security Policy
 
-Only the latest release (1.2.x) gets security patches. If you're on an older version, update first.
+Only the latest release (1.3.4) gets security patches. If you're on an older version, update first.
 
 ## Reporting a vulnerability
 
