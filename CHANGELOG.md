@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.4] — 2026-07-07
+
+**Fixed (security — the shipped v1.3.3 binaries were affected):**
+- **Flasher panel crash.** `gui_qt` used `QSpinBox` without importing it, so opening the flasher panel raised
+  `NameError`. Imported it (and dropped two unused imports).
+- **Two remote-reachable web holes closed** — a wildcard CORS policy and a CR/LF command-injection path in the
+  web UI / serial bridge.
+- **Untrusted web input hardened** — validate int/choice/required args in command `build()`; made the esptool
+  busy-claim atomic (check-then-set race); warn on a non-localhost bind and confine the log dir under `$HOME`.
+- **Controller thread-safety** — `send()` now survives a concurrent disconnect; bounded serial writes, guarded
+  reconnect, capped the read buffer.
+- **Flasher robustness** — bound chip detection and always reap the esptool child; reject an unparseable bundle
+  offset; corrected P4/H4 bootloader offset to `0x2000` and C61 to `0x0` (matched to the uf_core SSOT); dropped a
+  dead esp32c5 branch. Bounded AP/Station table rendering; enforced the updater timeout; fixed a capture-handle leak.
+
+**Changed:**
+- Packaging: added a `suicide` optional-deps extra (`nvs-partition-gen`), folded into `all`.
+- Contacts rebranded to **LxveLabs** — `discord.gg/lxvelabs` + Proton emails (business `LxveLabs@proton.me` /
+  direct `lxveace@proton.me`); README leads with `lxvelabs.com` and surfaces the PCBWay hardware collaboration.
+  Added a GitHub Sponsors link.
+
 ## [1.3.3] — 2026-07-01
 
 **Fixed:**

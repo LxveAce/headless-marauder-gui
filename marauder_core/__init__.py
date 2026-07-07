@@ -9,10 +9,10 @@ try:
     try:
         __version__ = _pkg_version("headless-marauder")
     except PackageNotFoundError:
-        __version__ = "1.3.3"
+        __version__ = "1.3.4"
     del _pkg_version, PackageNotFoundError
 except ImportError:  # pragma: no cover - importlib.metadata is stdlib on py>=3.9
-    __version__ = "1.3.3"
+    __version__ = "1.3.4"
 
 from .controller import MarauderController
 from .parsing import MarauderParser, AP, Station

@@ -15,13 +15,10 @@
 <!-- STATUS-ROADMAP:START -->
 ## Status & Roadmap
 
-**Status:** Production/Stable and shipping. Latest release is **v1.3.3** (the ESP32-C5 brick fix). All modules build cleanly and there are no open issues.
+**Status:** Production/Stable and shipping. Latest release is **v1.3.4** (flasher-panel crash fix + remote web-security hardening). All modules build cleanly and there are no open issues.
 
 **In progress / known issues:**
-- Cutting the next release (v1.3.3+) so the published binaries pick up recent build fixes that currently only live on `main`.
-- Aligning version strings to a single source of truth so the version shown in the app matches the released tag.
-- Correcting the documented `pip install ... [all]` command so the extras install reliably (use the PEP 508 form).
-- Catching the CHANGELOG up to the latest releases.
+- _Resolved in v1.3.4: release cut so published binaries include the fixes; version single-sourced; the `pip install ... [all]` command uses the PEP 508 form; CHANGELOG caught up._
 - Ongoing security hardening: re-verifying the flasher's HTTPS-only allowlist / redirect defense, keeping the web UI bound to localhost by default, and back-porting the hardening checklist from the downstream cyber-controller flasher audit.
 
 **Roadmap:**
