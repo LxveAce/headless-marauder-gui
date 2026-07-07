@@ -8,6 +8,8 @@
 
 **Runs on:** Linux (Kali, Debian, Ubuntu, Arch, Fedora), Windows 10/11, macOS (Apple Silicon), Raspberry Pi (ARM64)
 
+> **⚡ Hardware in the works** — [LxveLabs](https://github.com/LxveAce) is developing a custom security-hardware board **in collaboration with [PCBWay](https://www.pcbway.com)**.
+
 ---
 
 <!-- STATUS-ROADMAP:START -->
