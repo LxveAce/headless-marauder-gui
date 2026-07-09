@@ -13,18 +13,9 @@
 ---
 
 <!-- STATUS-ROADMAP:START -->
-## Status & Roadmap
+## 📦 Latest release
 
-**Status:** Production/Stable and shipping. Latest release is **v1.3.4** (flasher-panel crash fix + remote web-security hardening). All modules build cleanly and there are no open issues.
-
-**In progress / known issues:**
-- _Resolved in v1.3.4: release cut so published binaries include the fixes._
-- Ongoing security hardening: re-verifying the flasher's HTTPS-only allowlist / redirect defense, keeping the web UI bound to localhost by default, and back-porting the hardening checklist from the downstream cyber-controller flasher audit.
-
-**Roadmap:**
-- Add a `[project.scripts]` launch entry for the PyQt5 GUI so pip users can start the recommended front-end directly.
-- Single-source the version via `importlib.metadata` so it can't drift.
-- Track the Suicide-Marauder succession to **`deadmans-switch`** (firmware-agnostic; Guardian/Fork variants) and decide whether the flash path should follow it or stay pinned to the vendored bundle.
+**[v1.3.4](https://github.com/LxveAce/headless-marauder-gui/releases/latest)** — flasher-panel crash fix + remote web-security hardening (HTTPS-only fetch allowlist, web UI bound to localhost by default). Full version history and what's planned next → **[CHANGELOG.md](CHANGELOG.md)** · [Releases](https://github.com/LxveAce/headless-marauder-gui/releases).
 <!-- STATUS-ROADMAP:END -->
 
 ---
