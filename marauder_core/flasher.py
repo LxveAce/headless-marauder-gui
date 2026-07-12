@@ -41,6 +41,7 @@ which are ILLEGAL to operate. This module only FLASHES the stock images byte-for
 adds NO jamming functionality and enables nothing — it is plain firmware flashing.
 """
 
+import functools
 import hashlib
 import json
 import os
@@ -200,7 +201,11 @@ def esptool_argv(*args: str) -> List[str]:
     return [sys.executable, "-m", "esptool", *args]
 
 
+@functools.lru_cache(maxsize=1)
 def esptool_available() -> bool:
+    # Memoised: the probe spawns a fresh interpreter (~1-3s on Windows), and callers hit it on every
+    # flasher open. esptool won't appear/vanish mid-session, so caching the first result is safe and
+    # keeps repeat opens instant. GUIs additionally run the first probe off the UI thread.
     try:
         return subprocess.run(esptool_argv("version"), capture_output=True, timeout=20).returncode == 0
     except Exception:

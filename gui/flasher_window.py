@@ -44,13 +44,24 @@ class FlasherWindow(tk.Toplevel):
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._poll()
-        if not flasher.esptool_available():
-            self._log("[!] esptool not found. Install it:  pip install esptool")
+        # Probe esptool off the UI thread (the subprocess spawn stalls ~1-3s on Windows); the queue
+        # drain (_poll) surfaces the warning. Mirrors the Qt flasher.
+        threading.Thread(target=self._probe_esptool, daemon=True).start()
 
         if default_port:
             self.port_var.set(default_port)
 
+    def _probe_esptool(self):
+        if not flasher.esptool_available():
+            self._log("[!] esptool not found. Install it:  pip install esptool")
+
     def _on_close(self):
+        # Mirror the Qt flasher: don't tear down mid-flash — the esptool subprocess would keep the
+        # serial port and the next flash would fail 'port busy'. Make the user let it finish.
+        if self._busy:
+            messagebox.showwarning(
+                "Flashing", "A flash/erase is in progress — let it finish before closing.")
+            return
         self._closed = True
         if self._poll_id is not None:
             try:

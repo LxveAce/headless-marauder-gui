@@ -357,6 +357,11 @@ class MarauderGUI(tk.Tk):
                 self.console.insert("end", line + "\n", tag)
             else:
                 self.console.insert("end", line + "\n")
+            # Cap the console (the AP/Station tables are already bounded; this was the one unbounded
+            # sink) so a device streaming without limit can't grow it forever. Keep the newest 5000.
+            line_count = int(self.console.index("end-1c").split(".")[0])
+            if line_count > 5000:
+                self.console.delete("1.0", f"{line_count - 5000 + 1}.0")
             self.console.see("end")
             self.console.config(state="disabled")
         except tk.TclError:

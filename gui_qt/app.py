@@ -519,6 +519,11 @@ class FlasherDialog(QDialog):
         self._apply_profile_ui()
 
         self.timer = QTimer(self); self.timer.timeout.connect(self._drain); self.timer.start(40)
+        # Probe esptool OFF the GUI thread — the subprocess spawn (fresh interpreter + esptool import)
+        # stalls the UI ~1-3s on Windows; the warning is surfaced via the thread-safe console queue.
+        threading.Thread(target=self._probe_esptool, daemon=True).start()
+
+    def _probe_esptool(self):
         if not flasher.esptool_available():
             self._log("[!] esptool not found — pip install esptool")
 
@@ -911,6 +916,9 @@ class MainWindow(QMainWindow):
         right = QWidget(); rl = QVBoxLayout(right)
         self.tabs = QTabWidget()
         self.console = QPlainTextEdit(); self.console.setReadOnly(True)
+        # Bound the console like the tables (_MAX_TABLE_ROWS): a device streaming lines without limit
+        # (wrong baud / beacon-spam echo) would otherwise grow it forever, climbing memory + janking.
+        self.console.setMaximumBlockCount(5000)
         self.console.setFont(QFont("monospace", 10))
         self.console.setToolTip("Live serial output from the board.")
         ci = self.tabs.addTab(self.console, "Console")
