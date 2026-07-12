@@ -83,3 +83,23 @@ def test_qt_flasher_probes_esptool_off_the_gui_thread(qapp, monkeypatch):
     FlasherDialog(w, _mock_controller())           # __init__ must return without blocking on the probe
     assert done.wait(5), "the esptool probe never ran"
     assert seen["ident"] != main_ident             # it ran on a worker thread, not the GUI thread
+
+
+def test_qt_main_window_resyncs_button_after_external_disconnect(qapp):
+    """The flasher drops the shared serial session (ctl.disconnect()) to free the port for esptool.
+    The main window must re-derive its Connect button + status from ctl.connected on the next poll
+    tick — before the fix it stayed 'Disconnect' on a disconnected controller and the button then
+    did the opposite of its label (a click connected instead of disconnecting)."""
+    from gui_qt.app import MainWindow
+
+    ctl = _mock_controller()
+    w = MainWindow(ctl)
+    ctl.connect()                                  # mock connect -> connected
+    w._drain()                                     # a poll tick reconciles the UI to 'connected'
+    assert w.connect_btn.text() == "Disconnect"
+
+    ctl.disconnect()                               # the flasher frees the port out-of-band
+    assert ctl.connected is False
+    w._drain()                                     # the fix: re-derive the button from ctl.connected
+    assert w.connect_btn.text() == "Connect"
+    assert "disconnected" in w.status.text()

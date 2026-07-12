@@ -1232,6 +1232,23 @@ class MainWindow(QMainWindow):
                 self.logger.write_serial(line)
         except queue.Empty:
             pass
+        self._sync_connection_ui()
+
+    def _sync_connection_ui(self):
+        """Keep the Connect button + status honest when the serial session is dropped from OUTSIDE
+        _toggle — the flasher calls ctl.disconnect() to free the port for esptool, and a serial read
+        error clears it too. Without this the window still shows 'connected: COMx'/'Disconnect' on a
+        disconnected controller and the button then inverts (labelled Disconnect but actually connects)."""
+        connected = self.ctl.connected
+        if connected == getattr(self, "_last_connected", None):
+            return
+        self._last_connected = connected
+        if connected:
+            self.status.setText(f"connected: {self.ctl.port}"); self.status.setStyleSheet("color:#39ff14;")
+            self.connect_btn.setText("Disconnect")
+        else:
+            self.status.setText("disconnected"); self.status.setStyleSheet("color:#ff4d4d;")
+            self.connect_btn.setText("Connect")
 
     def _append(self, line):
         self.console.appendPlainText(line)
