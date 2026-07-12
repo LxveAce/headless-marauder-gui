@@ -95,3 +95,25 @@ def test_read_loop_caps_unbounded_buffer():
 
     # the oversized partial line was flushed once (buffer reset), not grown without bound
     assert any(len(e) >= ctrl_mod._MAX_LINE_BYTES for e in emitted)
+
+
+# ── the reader thread dying (board unplugged) must stop reporting 'connected' ──
+def test_reader_death_clears_connected():
+    """When _read_loop breaks on a serial read error (board yanked mid-session), it must clear
+    _running so `connected` reports False. Before the fix it stayed True with the dead handle, so
+    every front-end showed 'connected: COMx' while no serial input was ever processed again."""
+    ctrl = MarauderController(port="COMX", mock=False)
+    emitted = []
+    ctrl.subscribe(emitted.append)
+
+    class _DyingSer:
+        def read(self, _n):
+            raise serial.SerialException("device reports readiness to read but returned no data")
+
+    ctrl.ser = _DyingSer()
+    ctrl._running = True
+    assert ctrl.connected is True
+    ctrl._read_loop()                 # runs synchronously; the read raises → loop exits
+    assert ctrl._running is False
+    assert ctrl.connected is False    # the crux: no longer lies 'connected' after the reader dies
+    assert any("serial error" in ln for ln in emitted)

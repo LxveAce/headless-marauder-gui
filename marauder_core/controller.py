@@ -123,6 +123,9 @@ class MarauderController:
             except Exception as e:
                 if self._running:          # only noise if it wasn't a clean disconnect
                     self._emit(f"[serial error] {e}")
+                # The reader thread is dying (e.g. board unplugged mid-session). Clear _running so
+                # `connected` reports False instead of staying green forever with no input processed.
+                self._running = False
                 break
             if data:
                 buf += data
