@@ -90,14 +90,29 @@ def _run(argv, on_line: Line, env=None, timeout=180) -> int:
     return p.returncode
 
 
+def _safe_directory_present(root: str) -> bool:
+    """True if `root` (or the catch-all `*`) is already a global git safe.directory. Used so
+    update() can skip a redundant `--add`: `git config --add` appends unconditionally, so a blind
+    add on every update() accumulates duplicate safe.directory lines in the user's global gitconfig."""
+    try:
+        r = subprocess.run(["git", "config", "--global", "--get-all", "safe.directory"],
+                           capture_output=True, text=True, timeout=10)
+    except Exception:
+        return False
+    entries = {ln.strip() for ln in r.stdout.splitlines() if ln.strip()}
+    return root in entries or "*" in entries
+
+
 def update(on_line: Line) -> bool:
     """Pull latest + reinstall requirements. Returns True on success."""
     root = repo_root()
     if not is_git_checkout():
         on_line("[update] not a git checkout — install via `git clone` to enable updates.")
         return False
-    # tolerate root-owned clones run by a normal user (Kali sudo-install flow)
-    _run(["git", "config", "--global", "--add", "safe.directory", root], on_line)
+    # tolerate root-owned clones run by a normal user (Kali sudo-install flow). Only ADD the entry
+    # if it isn't already present — a blind `--add` on every update() piles up duplicate lines.
+    if not _safe_directory_present(root):
+        _run(["git", "config", "--global", "--add", "safe.directory", root], on_line)
     on_line(f"[update] current revision: {current_revision()}")
     if _run(["git", "-C", root, "pull", "--ff-only"], on_line, env=_git_env()) != 0:
         on_line("[update] git pull failed (local changes, auth, or no network?). Aborted.")

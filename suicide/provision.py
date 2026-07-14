@@ -284,6 +284,13 @@ def validate_password(pw_bytes):
             "password begins with the reserved serial keyword `unlock ` (the serial adapter strips "
             "this prefix before hashing). Choose a password that does not start with `unlock `."
         )
+    if 0 in bytes(pw_bytes):
+        raise ProvisionError(
+            "password contains a NUL byte; the firmware stores the secret in a char[64] C-string and "
+            "truncates at the first NUL before hashing, so the full password could NEVER validate on-"
+            "device (and on an ARMED board the correct password would be counted as a failed attempt "
+            "and trigger the wipe). Remove the NUL byte."
+        )
 
 
 # ----------------------------------------------------------------------------------------------

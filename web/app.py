@@ -147,6 +147,15 @@ def api_profiles():
 @socketio.on("connect_serial")
 def on_connect_serial(data):
     global ctrl
+    # Refuse to (re)open the port while a flash/erase/detect/suicide op owns it. esptool needs the
+    # tty exclusively; without this guard a second tab (or a second client on --host 0.0.0.0) could
+    # re-open the port mid-flash and collide with the running esptool. Every flasher handler already
+    # gates on _flash_busy via _acquire_flash — the connect path must honor the same reservation.
+    with _flash_lock:
+        if _flash_busy:
+            emit("status", {"connected": False,
+                            "error": "A flash/erase is in progress — try again when it finishes."})
+            return
     port = data.get("port") or None
     mock = data.get("mock", False)
     try:
