@@ -114,7 +114,10 @@ def build_bundle(
 
     if out_dir is None:
         import tempfile
-        out_dir = os.path.join(tempfile.gettempdir(), "suicide_bundle")
+        # A FRESH unique dir per provisioning — never a fixed reused path. A shared out_dir would let
+        # stale .bin artifacts from an EARLIER provisioning survive on disk and be re-hashed into this
+        # manifest and flashed as if fresh. Callers use the returned path, so a unique dir is safe.
+        out_dir = tempfile.mkdtemp(prefix="suicide_bundle_")
     os.makedirs(out_dir, exist_ok=True)
 
     # Build an argparse-like namespace matching what provision.main() expects
@@ -161,6 +164,15 @@ def build_bundle(
     salt = os.urandom(prov.SALT_LEN)
     pw_buf = bytearray(password.encode("utf-8"))
     with prov._zeroized(pw_buf):
+        # Parity guard — mirrors provision.build_bundle (which calls validate_password at the same
+        # point). Reject a password the firmware would hash DIFFERENTLY than the host: >63 UTF-8 bytes
+        # (the char[64] clamp), leading/trailing whitespace, or a leading `unlock `/`unlock\t` keyword
+        # (the serial adapter strips these before hashing). Without it, such a passphrase silently
+        # produces a bundle whose hash can NEVER validate on-device — and on an ARMED board the CORRECT
+        # password is counted as a failed attempt and triggers the full-flash wipe/brick after max_att.
+        # validate_password raises ProvisionError; running it inside _zeroized still zeroizes pw_buf on
+        # the error path, and both front-ends surface the exception as "[error] provisioning failed".
+        prov.validate_password(pw_buf)
         pwhash = prov.derive_pwhash(pw_buf, salt, args.kdf_iter, prov.KDF_DKLEN)
     del pw_buf
 
