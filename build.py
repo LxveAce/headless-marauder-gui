@@ -25,6 +25,7 @@ HIDDEN_IMPORTS = [
     "marauder_core.capture",
     "marauder_core.flasher",
     "marauder_core.updater",
+    "suicide",
     "serial",
     "serial.tools",
     "serial.tools.list_ports",
@@ -39,6 +40,11 @@ DATA_FILES = [
     (os.path.join(HERE, "web", "templates"), os.path.join("web", "templates")),
     (os.path.join(HERE, "GUIDE.md"), "."),
     (os.path.join(HERE, "assets", "icon.svg"), "assets"),
+    # The suicide provisioner is loaded at runtime by FILE path (suicide._get_provisioner execs
+    # provision.py) and reads its bundled partition CSVs from the package dir, so the whole suicide/
+    # tree must ship as DATA — a hidden-import alone (bytecode in the PYZ) leaves those file reads
+    # missing, and the frozen binary's "Provision new bundle" path then fails at runtime.
+    (os.path.join(HERE, "suicide"), "suicide"),
 ]
 
 
