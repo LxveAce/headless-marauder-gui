@@ -20,6 +20,13 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Frozen-binary esptool trampoline: a PyInstaller build has no `python -m esptool`, so
+# flasher.esptool_argv() re-execs THIS exe with a sentinel; dispatch to esptool and exit BEFORE
+# importing the GUI/PyQt5. A no-op under a normal launch and in source/pip runs (frozen is False).
+if getattr(sys, "frozen", False):
+    from marauder_core import flasher as _flasher
+    _flasher.run_esptool_entrypoint()
+
 try:
     from PyQt5.QtCore import Qt, QTimer
     from PyQt5.QtGui import QFont, QKeySequence
