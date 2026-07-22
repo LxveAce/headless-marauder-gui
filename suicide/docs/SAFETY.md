@@ -1,6 +1,6 @@
 # SAFETY — read before you flash, arm, or test
 
-Suicide Marauder can **permanently and irrecoverably destroy data** — by design. This document is
+Suicide Marauder can permanently and irrecoverably destroy data, by design. This document is
 about not destroying *the wrong* data (yours, by accident). It is as important as the source code.
 
 > **Scope & ethics.** This is an **owner-only, defensive** anti-forensic layer for an ESP32
@@ -51,7 +51,7 @@ the thing you actually armed it to do.
   with no recovery and is not undoable. It is behind a separate, explicitly-warned flasher checkbox.
   Only enable it when you understand the one-way consequences.
 
-## Known limits (stated honestly)
+## Known limits
 
 - **SD destruction is best-effort.** Managed-NAND wear-leveling/over-provisioning can retain copies
   in remapped cells that overwrite cannot reach. The only strong guarantee is at-rest encryption of

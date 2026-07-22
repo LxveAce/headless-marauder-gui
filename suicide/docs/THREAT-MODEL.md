@@ -25,7 +25,7 @@ your own device, for confidentiality, within the law that applies to you.
 | A2 | Opportunist with a laptop | Tries to read/flash over USB | T2: Flash Encryption makes a dump meaningless; Secure Boot + disabled UART download stop reflash-past-gate. T1: **not** protected — selective `guardcfg` erase, `armed=0`/`cfg_ver`/`att_ct`/`kdf_iter` NVS tamper, otadata rewrite, or a full reflash (incl. via this project's own flasher) all bypass the gate; enumerated in "Residual risks" below. |
 | A3 | Tamper / snatch | Opens the case or yanks the device | Dead-man arming line (armed): case-open/cut/**disconnect** reads NOT-ARMED → wipe. Best-effort given power-loss timing. **Limit:** the single-ended line detects open/cut/disconnect, **not** an attacker who *clamps* the pin to the armed level (see "stuck-at" note below). |
 | A4 | Coercion ("unlock it") | Demands the password | Duress: entering a wrong password the configured number of times wipes instead of unlocking. (Owner's choice; understand local law on compelled passwords.) Note: a *recovered* real password also enables the authenticated serial **host-wipe** (a force-wipe DoS), not only unlock — see "Residual risks." |
-| A5 | Forensics lab | Chip-off, JTAG, FTL spare-area recovery | T2 (encryption) is the only real defense. SD remanence and a *removed* SD card are out of scope. Honestly documented as a limit. |
+| A5 | Forensics lab | Chip-off, JTAG, FTL spare-area recovery | T2 (encryption) is the only real defense. SD remanence and a *removed* SD card are out of scope, documented as a limit. |
 
 ## Trust boundaries
 
