@@ -152,7 +152,7 @@ The classic chain. Deauth forces clients to re-handshake, you capture it, crack 
 
 ### D. Wardriving
 
-1. Plug in GPS (the deck can share one GPS via `gpsd`).
+1. Plug in GPS (tools can share one GPS via `gpsd`).
 2. **Wardrive** (`wardrive`) while moving — writes a WiGLE-format CSV to SD.
 3. Upload that CSV to [wigle.net](https://wigle.net) for mapping.
 
@@ -199,11 +199,6 @@ PCAP, evil portal captures, and wardrive CSVs live on the board's SD card (use `
 - **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking (chain A).
 - **WiGLE** — wardrive CSVs (chain D).
 - **Flipper Zero** — pair sub-GHz/RFID/NFC/IR work (Flipper) with WiFi/BLE (this) for full coverage.
-- **The cyberdeck** — `marauder_core` is importable; the deck's dashboard reuses it alongside Kismet, Meshtastic, and GPS.
-- **Kismet** — run it on the Pi for passive WiFi mapping while Marauder handles active attacks. Both can share GPS via `gpsd`.
-- **Wireshark / hashcat / aircrack-ng / hcxtools** — for PCAP analysis and cracking.
-- **WiGLE** — for wardrive map uploads.
-- **Flipper Zero** — pair sub-GHz/RFID/NFC/IR work with WiFi/BLE from this.
 
 ---
 

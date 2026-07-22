@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+**Docs:**
+- Removed internal planning/handoff notes from the public tree and tightened the guide so the repo reads as a
+  self-contained standalone app: deleted `FORWARD-PLAN.md`, dropped a duplicated "Works with" list plus its stray
+  companion-rig references in `GUIDE.md`, and reworded the provisioner research digest to describe a generic
+  constrained host. No code or user-facing feature changed.
+
 ## [1.3.4] — 2026-07-07
 
 **Fixed (security — the shipped v1.3.3 binaries were affected):**
@@ -31,7 +39,7 @@
 
 **Changed:**
 - `marauder_core.__version__` is now single-sourced from the installed distribution metadata (with a hardcoded fallback for source / frozen builds), so it can't drift from `pyproject.toml` again.
-- README refreshed for accuracy; added a Status & Roadmap section, a Connect/contact section, and `FORWARD-PLAN.md` session-handoff notes.
+- README refreshed for accuracy; added a Status & Roadmap section and a Connect/contact section.
 - Vendored Suicide-Marauder bundle synced to canonical (BootGate no longer telegraphs the locked state; guardcfg partition sizing fix so the gate activates; password-parity hardening; hardware-validated on CYD).
 
 **Docs:**
