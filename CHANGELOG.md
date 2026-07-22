@@ -2,11 +2,39 @@
 
 ## [Unreleased]
 
+**Fixed:**
+- **Flashing works in the standalone build again (critical).** In a PyInstaller/frozen binary, invoking esptool
+  re-launched the app instead of running esptool, so every flash / erase / detect silently failed on the
+  downloadable v1.3.4 executables. esptool is now invoked correctly under a frozen build.
+- **The Connect button + status re-sync** when the flasher drops the serial session, so the UI no longer shows a
+  stale "connected" after a flash takes the port.
+- **No more flasher-open freeze** — opening the flasher panel could hang the UI; the console output is now bounded
+  and a window close during a flash is guarded.
+- **Serial reader-thread race fixed** — the race could kill the web tables and leave a stale "connected" after the
+  reader thread died.
+- **Suicide provisioning no longer crashes** — the `build_bundle` wrapper had dropped `flash_passes` / `fast_wipe`,
+  which crashed GUI provisioning.
+
+**Security:**
+- **Suicide provisioning bounds hardened** — `sd_passes`, `flash_passes`, `arm_pin`, and `max_att` are clamped to
+  the NVS `u8` range before they're written, and the suicide password is NUL-safe. `build_bundle` now enforces the
+  same `validate_password` checks as the CLI (an armed board could otherwise self-wipe on a malformed password) and
+  uses a fresh output dir per call; the web deadman/armed integer parsing is guarded too.
+- **Web / serial input hardened** — a flash-busy connect guard, more robust list-routing / SSID parsing, and a
+  de-duplicated git `safe.directory` entry.
+
+**Changed:**
+- Releases now publish a `SHA256SUMS.txt` so downloads can be integrity-checked (`sha256sum -c`).
+- The `suicide` provisioner package is bundled into the PyInstaller build.
+
 **Docs:**
 - Removed internal planning/handoff notes from the public tree and tightened the guide so the repo reads as a
   self-contained standalone app: deleted `FORWARD-PLAN.md`, dropped a duplicated "Works with" list plus its stray
   companion-rig references in `GUIDE.md`, and reworded the provisioner research digest to describe a generic
-  constrained host. No code or user-facing feature changed.
+  constrained host.
+- Overhauled the README to the LxveLabs standard (accuracy, contact, structure), dropped the "Production/Stable"
+  over-claim, condensed Status & Roadmap to the latest release, stripped stray tool-call artifacts from
+  `ARCHITECTURE.md`, and fixed the broken partition-CSV links in the suicide `INTEGRATION.md`.
 
 ## [1.3.4] — 2026-07-07
 
