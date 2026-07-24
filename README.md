@@ -361,7 +361,7 @@ Headless Marauder is one tool in a small family:
 
 | Project | What it is |
 |---|---|
-| **[Universal Flasher](https://github.com/LxveAce/universal-flasher)** | This app's `FirmwareProfile` flasher grown into a standalone multi-firmware flasher + device manager. Four flash backends: esptool (ESP32), an SD-image writer (Pwnagotchi / RaspyJack / Kali ARM), ADB (RayHunter), and qFlipper (Flipper Zero). Plus batch flash, backup/restore, offline cache, and a JSON plugin system. See its [releases](https://github.com/LxveAce/universal-flasher/releases) for the current firmware list. |
+| **[LxveFlasher](https://github.com/LxveAce/universal-flasher)** | This app's `FirmwareProfile` flasher grown into a standalone multi-firmware flasher + device manager. Four flash backends: esptool (ESP32), an SD-image writer (Pwnagotchi / RaspyJack / Kali ARM), ADB (RayHunter), and qFlipper (Flipper Zero). Plus batch flash, backup/restore, offline cache, and a JSON plugin system. See its [releases](https://github.com/LxveAce/universal-flasher/releases) for the current firmware list. |
 | **[Dead Man's Switch](https://github.com/LxveAce/deadmans-switch)** | The anti-forensic provisioner behind the Suicide-build path (successor to Suicide-Marauder). A firmware-agnostic boot gate + wipe for ESP32 security firmware. |
 
 ---
