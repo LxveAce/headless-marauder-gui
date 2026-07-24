@@ -20,6 +20,8 @@ Connect, scan, attack, flash. 70 commands and 4 front-ends in one standalone app
 
 > ⚠️ **Authorized, lawful use only.** This is a security-research tool. Use it only on systems you own or have explicit permission to test. Provided as-is, no warranty; you assume all risk. See [DISCLAIMER.md](DISCLAIMER.md).
 
+> **Where this fits.** Headless Marauder is the focused, standalone app for ESP32 Marauder — one download, no Python or browser. If you're running more than Marauder — many firmwares, several boards at once, live control and logging in one place — reach for the flagship **[cyber-controller](https://github.com/LxveAce/cyber-controller)**.
+
 ---
 
 Most Marauder UIs are browser-based and lean on the Web Serial API, which is Chromium-only. On Kali that means Firefox can't talk to the board at all, and even in Chrome the feature set is thin. Headless Marauder is a native app instead: a full controller and a firmware flasher in one window, running on Linux, Windows, macOS, or a Raspberry Pi. Download it, plug in an ESP32 running Marauder, and go.
