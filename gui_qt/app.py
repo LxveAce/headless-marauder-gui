@@ -45,7 +45,12 @@ except ImportError as _e:  # PyQt5 not installed — give an actionable hint, no
         "  (or: pip install 'headless-marauder[qt]')\n"
         "No PyQt5? The Textual TUI needs no Qt:  headless-marauder-tui\n"
     )
-    sys.exit(1)
+    # A direct launch exits cleanly; an IMPORT (e.g. tests via pytest.importorskip) must raise a
+    # catchable ImportError, not SystemExit — sys.exit() at import time is uncatchable by
+    # importorskip and crashes the collector (INTERNALERROR), which is what reddened CI.
+    if __name__ == "__main__":
+        sys.exit(1)
+    raise ImportError("Headless Marauder Qt GUI requires PyQt5 (pip install PyQt5)") from _e
 
 from marauder_core import (
     MarauderController, MarauderParser, CaptureLogger, commands, flasher, updater, __version__,
