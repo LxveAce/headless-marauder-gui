@@ -8,7 +8,11 @@ so it went unnoticed. Guard the specific name here (importing the module is enou
 
 import pytest
 
-app = pytest.importorskip("gui_qt.app")
+# Skip cleanly when the optional Qt dependency is absent (e.g. CI runners without PyQt5). Guarding on
+# PyQt5 directly is the idiomatic importorskip use — importing gui_qt.app while PyQt5 is missing raises
+# an ImportError *from within* the module, which pytest 9 flags (and CI errors on) rather than skips.
+pytest.importorskip("PyQt5")
+import gui_qt.app as app  # noqa: E402  (imported after the skip-guard, only when PyQt5 is present)
 
 
 def test_qspinbox_name_is_resolvable():
