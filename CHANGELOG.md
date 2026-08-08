@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.5] — 2026-08-08
+
 **Fixed:**
 - **Flashing works in the standalone build again (critical).** In a PyInstaller/frozen binary, invoking esptool
   re-launched the app instead of running esptool, so every flash / erase / detect silently failed on the
@@ -163,6 +165,9 @@ Initial release.
 - `--mock` mode for dev/demo without hardware
 - MIT License
 
+[Unreleased]: https://github.com/LxveAce/headless-marauder-gui/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.5
+[1.3.4]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.4
 [1.3.3]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.3
 [1.3.2]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.2
 [1.3.1]: https://github.com/LxveAce/headless-marauder-gui/releases/tag/v1.3.1
