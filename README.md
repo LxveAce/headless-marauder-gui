@@ -1,3 +1,7 @@
+> ## ⛔ Retired — see [Cyber Controller](https://github.com/LxveAce/cyber-controller)
+> Headless Marauder is retired. Its Marauder control and multi-firmware flashing carried forward into
+> **Cyber Controller**, the actively-developed flagship. This repo stays up for reference — no further updates.
+
 <div align="center">
 
 <img src="assets/icon.svg" width="120" alt="Headless Marauder">
